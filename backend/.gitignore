@@ -1,0 +1,36 @@
+# --- SECURITY ---
+# Never commit the .env file. It contains your GOOGLE_API_KEY.
+# Pushing this to GitHub will lead to your API credits being stolen within minutes.
+.env
+
+# --- VIRTUAL ENVIRONMENTS ---
+# Excludes the Python virtual environment folders. 
+# These are machine-specific and should be rebuilt via requirements.txt, not tracked.
+env/
+venv/
+ENV/
+
+# --- PYTHON ARTIFACTS ---
+# Excludes compiled Python files and byte-code which clutter the repo.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- AUTOMATION & DRIVERS ---
+# Excludes Selenium/Webdrivers (e.g., chromedriver.exe).
+# These should be managed via webdriver-manager in code, not stored in the repo.
+drivers/
+*.exe
+*.log
+
+# --- PROJECT SPECIFIC ---
+# You mentioned app_recuiter.py—if this is a local test script or contains 
+# hardcoded credentials, keeping it ignored is smart.
+app_recuiter.py
+list_models.py
+
+# --- OS SPECIFIC ---
+# Prevents Mac/Windows system files from appearing in your clean repo.
+.DS_Store
+Thumbs.db
