@@ -1,0 +1,36 @@
+﻿python : 2026-03-17 
+18:26:17,749 - ERROR - 
+JobSpy:Glassdoor - 
+Glassdoor: Error 
+encountered in API 
+response
+At line:1 char:1
++ python 
+test_scrape.py > 
+test_output.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (2026-03-17 18   
+ :2...in API respon    
+se:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+2026-03-17 
+18:26:18,788 - INFO - 
+JobSpy:Linkedin - 
+finished scraping
+Testing jobspy scraper...
+Scrape successful. Found 20 jobs.
+                    id    site  ... vacancy_count work_from_home_type
+0  in-051b103dbd5831f4  indeed  ...          None                None
+1  in-26e3ea014e65d108  indeed  ...          None                None
+2  in-a19df3cfbbf69341  indeed  ...          None                None
+3  in-eb7079eb803f0b1c  indeed  ...          None                None
+4  in-9647b0e314c22a8c  indeed  ...          None                None
+
+[5 rows x 34 columns]

@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Developer Tool Design System - Clean, Professional, Modern */
+
+@layer base {
+  :root {
+    /* Core backgrounds */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    /* Card surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary - Indigo accent */
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Subtle slate */
+    --secondary: 215 25% 95%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted surfaces */
+    --muted: 215 20% 94%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent */
+    --accent: 239 84% 67%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & inputs */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 239 84% 67%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --panel-bg: 210 20% 99%;
+    --upload-zone-bg: 215 25% 97%;
+    --upload-zone-border: 215 25% 85%;
+    --upload-zone-hover: 239 84% 67%;
+    --skeleton-base: 215 20% 94%;
+    --skeleton-shine: 215 20% 98%;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(222 47% 11% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.1), 0 2px 4px -2px hsl(222 47% 11% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.1), 0 4px 6px -4px hsl(222 47% 11% / 0.1);
+
+    /* Sidebar (keeping defaults) */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 239 84% 67%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 239 84% 67%;
+
+    --panel-bg: 222 47% 7%;
+    --upload-zone-bg: 222 47% 10%;
+    --upload-zone-border: 222 47% 20%;
+    --skeleton-base: 217 33% 17%;
+    --skeleton-shine: 217 33% 22%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  .upload-zone {
+    @apply relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer;
+    background: hsl(var(--upload-zone-bg));
+    border-color: hsl(var(--upload-zone-border));
+  }
+
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: hsl(var(--upload-zone-hover));
+    background: hsl(var(--upload-zone-hover) / 0.05);
+  }
+
+  .panel {
+    @apply rounded-2xl border shadow-sm;
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-md);
+  }
+
+  .skeleton-pulse {
+    @apply rounded-lg;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--skeleton-base)) 0%,
+      hsl(var(--skeleton-shine)) 50%,
+      hsl(var(--skeleton-base)) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .markdown-content h1 {
+    @apply text-2xl font-bold mb-4 text-foreground;
+  }
+
+  .markdown-content h2 {
+    @apply text-xl font-semibold mb-3 text-foreground;
+  }
+
+  .markdown-content h3 {
+    @apply text-lg font-semibold mb-2 text-foreground;
+  }
+
+  .markdown-content p {
+    @apply mb-4 leading-relaxed text-foreground/90;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    @apply mb-4 pl-6 space-y-2;
+  }
+
+  .markdown-content li {
+    @apply text-foreground/90;
+  }
+
+  .markdown-content ul li {
+    @apply list-disc;
+  }
+
+  .markdown-content ol li {
+    @apply list-decimal;
+  }
+
+  .markdown-content code {
+    @apply px-1.5 py-0.5 rounded bg-muted text-sm font-mono;
+  }
+
+  .markdown-content pre {
+    @apply p-4 rounded-lg bg-muted overflow-x-auto mb-4;
+  }
+
+  .markdown-content pre code {
+    @apply p-0 bg-transparent;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-primary/30 pl-4 italic text-muted-foreground mb-4;
+  }
+
+  .markdown-content strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .markdown-content a {
+    @apply text-primary underline underline-offset-2 hover:text-primary/80;
+  }
+}
