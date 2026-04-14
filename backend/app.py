@@ -5,6 +5,10 @@ import dotenv
 from scrape import scrape_job_description, scrape_resume
 from flask_cors import CORS
 from colorama import Fore
+
+import base64
+from pdf_generator import generate_styled_cv
+import requests
 # 1. ENVIRONMENT & CONFIGURATION
 # Load environment variables (API keys, etc.) from .env file for security
 dotenv.load_dotenv()
@@ -13,15 +17,11 @@ app = Flask(__name__)
 
 # 2. SECURITY & CROSS-ORIGIN RESOURCE SHARING
 # Restricting CORS to local development port to prevent unauthorized external access
-CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
+CORS(app, resources={r"/*": {"origins": "https://mentorsync-swart.vercel.app/"}})
 
 # 3. AI CLIENT INITIALIZATION
 # Initialize Google Gemini Client using the modern generative AI SDK
 client = Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-
-import base64
-from pdf_generator import generate_styled_cv
-import requests
 
 # Set Hunter API key if available
 HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY")
@@ -487,6 +487,7 @@ def get_applied_jobs():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
-    # Running on custom port 5555 to avoid conflicts with common 5000/8000 defaults
-    app.run(port=5555, debug=True, use_reloader=False)
-    
+    # Use Render's PORT if it exists, otherwise use 5555 for local dev
+    port = int(os.environ.get("PORT", 5555))
+    # Must use 0.0.0.0 to be visible to Render's network
+    app.run(host='0.0.0.0', port=port)
