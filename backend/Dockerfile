@@ -1,5 +1,4 @@
 FROM python:3.11-slim-bookworm
-
 # 1. System Dependencies for Chrome/Selenium
 RUN apt-get update && apt-get install -y \
     wget gnupg unzip curl xvfb \
@@ -11,7 +10,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
+# Force a version of setuptools that supports legacy setup flags
+# Use --no-build-isolation to prevent pip from using the latest setuptools in a temp env
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 # 2. Copy requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
