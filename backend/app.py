@@ -1,7 +1,7 @@
 import os
 from google.genai import Client
 from flask import Flask, request, jsonify
-import dotenv
+from dotenv import load_dotenv
 from scrape import scrape_job_description, scrape_resume
 from flask_cors import CORS
 from colorama import Fore
@@ -11,7 +11,8 @@ from pdf_generator import generate_styled_cv
 import requests
 # 1. ENVIRONMENT & CONFIGURATION
 # Load environment variables (API keys, etc.) from .env file for security
-dotenv.load_dotenv()
+if not os.environ.get("DOCKER_CONTAINER"):
+    load_dotenv()
 
 app = Flask(__name__)
 
