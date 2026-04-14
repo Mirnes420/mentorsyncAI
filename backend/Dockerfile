@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+RUN pip install --no-cache-dir "websockets>=14.0,<15.0"
+
+RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
 # Force a version of setuptools that supports legacy setup flags
 # Use --no-build-isolation to prevent pip from using the latest setuptools in a temp env
 # 2. Copy requirements
@@ -18,7 +22,6 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # 3. THE BYPASS: Install everything EXCEPT the two conflicting packages
 # This prevents the "ResolutionImpossible" error
-RUN pip install --no-cache-dir websockets==14.2 seleniumbase==4.33.1 --no-deps
 
 RUN pip install --no-cache-dir -r requirements.txt --exclude BeautifulSoup
 
