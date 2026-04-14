@@ -67,7 +67,7 @@ const Landing = () => {
                             </DialogTrigger>
                             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90 backdrop-blur-3xl shadow-2xl">
                                 <video
-                                    src="/src/media/ms_cropped.mp4"
+                                    src="/ms_cropped.mp4"
                                     className="w-full h-full aspect-video"
                                     controls
                                     autoPlay
