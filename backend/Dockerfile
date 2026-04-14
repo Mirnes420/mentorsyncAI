@@ -1,9 +1,6 @@
 FROM python:3.11-slim-bookworm
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# 1. Install Chrome and System Dependencies (Required for Selenium on Render)
+# 1. System Dependencies for Chrome/Selenium
 RUN apt-get update && apt-get install -y \
     wget gnupg unzip curl xvfb \
     libxi6 libgbm1 libasound2 libnss3 libxss1 xauth \
@@ -20,14 +17,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 
 # 3. THE BYPASS: Install everything EXCEPT the two conflicting packages
+# This prevents the "ResolutionImpossible" error
 RUN pip install --no-cache-dir $(grep -vE "seleniumbase|websockets" requirements.txt)
 
-# 4. MANUALLY install the conflict-causers
-# This stops pip from checking dependencies and failing the build
+# 4. MANUALLY install the conflict-causers with --no-deps
+# We force the versions that keep Gemini (websockets < 15) and Seleniumbase alive
+RUN pip install --no-cache-dir "websockets>=13.0.0,<15.1.0" --no-deps
 RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
-RUN pip install --no-cache-dir "websockets>=13.0.0,<15.1.0"
 
 COPY . .
 
-# Render uses the $PORT environment variable automatically
+# Render uses the $PORT environment variable
 CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:$PORT"]
