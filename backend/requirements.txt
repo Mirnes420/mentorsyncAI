@@ -12,8 +12,8 @@ certifi==2026.1.4
 cffi==2.0.0
 chardet==5.2.0
 charset-normalizer==3.4.4
-selenium==4.40.0
-seleniumbase==4.46.5
+selenium
+seleniumbase
 click==8.3.1
 colorama==0.4.6
 cryptography==46.0.4
@@ -129,7 +129,7 @@ rich==14.3.2
 rpds-py==0.30.0
 rsa==4.9.1
 sbvirtualdisplay==1.4.0
-websockets>=13.0.0,<15.1.0
+websockets
 setuptools==82.0.0
 six==1.17.0
 smmap==5.0.2
