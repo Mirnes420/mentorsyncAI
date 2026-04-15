@@ -18,7 +18,19 @@ app = Flask(__name__)
 
 # 2. SECURITY & CROSS-ORIGIN RESOURCE SHARING
 # Restricting CORS to local development port to prevent unauthorized external access
-CORS(app, resources={r"/*": {"origins": "https://mentorsync-swart.vercel.app/"}})
+# Define your allowed origins
+allowed_origins = [
+    "http://localhost:8080",
+    "https://mentorsync-swart.vercel.app"
+]
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # 3. AI CLIENT INITIALIZATION
 # Initialize Google Gemini Client using the modern generative AI SDK
