@@ -1,5 +1,6 @@
 FROM python:3.11-slim-bookworm
-# 1. System Dependencies for Chrome/Selenium
+
+# 1. System Dependencies (Keep this as is)
 RUN apt-get update && apt-get install -y \
     wget gnupg unzip curl xvfb \
     libxi6 libgbm1 libasound2 libnss3 libxss1 xauth \
@@ -11,27 +12,19 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir "websockets>=14.0,<15.0"
+# 2. Upgrade core tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
+# 3. INSTALL THE AI CORE (This pins websockets to <15.1.0)
+RUN pip install --no-cache-dir "google-genai==1.63.0" "websockets==14.2"
+
+# 4. INSTALL SELENIUMBASE WITHOUT DEPS (This prevents it from demanding websockets 16)
 RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
-# Force a version of setuptools that supports legacy setup flags
-# Use --no-build-isolation to prevent pip from using the latest setuptools in a temp env
-# 2. Copy requirements
+
+# 5. INSTALL THE REST (Which no longer contains the conflicting packages)
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip
-
-# 3. THE BYPASS: Install everything EXCEPT the two conflicting packages
-# This prevents the "ResolutionImpossible" error
-
-RUN pip install --no-cache-dir -r requirements.txt --exclude BeautifulSoup
-
-# 4. MANUALLY install the conflict-causers with --no-deps
-# We force the versions that keep Gemini (websockets < 15) and Seleniumbase alive
-# Force-install the "Peacekeeper" version of websockets first
-RUN pip install --no-cache-dir "websockets>=14.0,<15.0" --no-deps
-RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Render uses the $PORT environment variable
 CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:$PORT"]
