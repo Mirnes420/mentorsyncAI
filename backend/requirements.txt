@@ -14,7 +14,6 @@ cffi==2.0.0
 chardet==5.2.0
 charset-normalizer==3.4.4
 selenium==4.40.0
-seleniumbase==4.46.5
 click==8.3.1
 colorama==0.4.6
 cryptography==46.0.4
@@ -41,7 +40,6 @@ gitdb==4.0.12
 GitPython==3.1.46
 google==3.0.0
 google-auth==2.48.0
-google-genai==1.63.0
 greenlet==3.3.0
 gunicorn==23.0.0
 h11==0.16.0
@@ -130,7 +128,6 @@ rich==14.3.2
 rpds-py==0.30.0
 rsa==4.9.1
 sbvirtualdisplay==1.4.0
-websockets==14.2
 setuptools==82.0.0
 six==1.17.0
 smmap==5.0.2
