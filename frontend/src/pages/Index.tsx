@@ -158,7 +158,7 @@ const Index = () => {
       if (searchTerm) formData.append('search_term', searchTerm);
       formData.append('location', userLocation);
 
-      const response = await fetch('http://localhost:5555/api/jobs', {
+      const response = await fetch('https://mentorsyncai.onrender.com/api/jobs', {
         method: 'POST',
         body: formData,
       });
@@ -191,7 +191,7 @@ const Index = () => {
       formData.append('resume_pdf', file);
       formData.append('job_url', job.job_url);
 
-      const response = await fetch('http://localhost:5555/api/analyze-gap', {
+      const response = await fetch('https://mentorsyncai.onrender.com/api/analyze-gap', {
         method: 'POST',
         body: formData,
       });
@@ -225,7 +225,7 @@ const Index = () => {
         formData.append('user_answers', JSON.stringify(userAnswers));
       }
 
-      const response = await fetch('http://localhost:5555/api/generate-cv-data', {
+      const response = await fetch('https://mentorsyncai.onrender.com/api/generate-cv-data', {
         method: 'POST',
         body: formData,
       });
@@ -262,7 +262,7 @@ const Index = () => {
   const handleFinalizePdf = async (editedData: any) => {
     setIsRenderingPdf(true);
     try {
-      const response = await fetch('http://localhost:5555/api/render-pdf', {
+      const response = await fetch('https://mentorsyncai.onrender.com/api/render-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editedData),
