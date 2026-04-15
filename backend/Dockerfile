@@ -16,9 +16,13 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # 3. INSTALL THE AI CORE (This pins websockets to <15.1.0)
-RUN pip install --no-cache-dir "google-genai==1.63.0" "websockets==14.2"
+# 1. Install websockets first - the "bridge" version
+RUN pip install --no-cache-dir "websockets==14.2"
 
-# 4. INSTALL SELENIUMBASE WITHOUT DEPS (This prevents it from demanding websockets 16)
+# 2. Force install GenAI (requires websockets < 15.1)
+RUN pip install --no-cache-dir google-genai==1.63.0 --no-deps
+
+# 3. Force install SeleniumBase (usually wants websockets 16+, but we say NO)
 RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
 
 # 5. INSTALL THE REST (Which no longer contains the conflicting packages)
