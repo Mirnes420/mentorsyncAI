@@ -54,6 +54,42 @@ def handle_500_error(e):
 api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
 client = GeminiClient(api_key=api_key)
 
+# 4. JOBSPY CONFIGURATION
+VALID_JOBSPY_COUNTRIES = [
+    'argentina', 'australia', 'austria', 'bahrain', 'bangladesh', 'belgium', 'bulgaria', 'brazil', 
+    'canada', 'chile', 'china', 'colombia', 'costa rica', 'croatia', 'cyprus', 'czech republic', 
+    'czechia', 'denmark', 'ecuador', 'egypt', 'estonia', 'finland', 'france', 'germany', 'greece', 
+    'hong kong', 'hungary', 'india', 'indonesia', 'ireland', 'israel', 'italy', 'japan', 'kuwait', 
+    'latvia', 'lithuania', 'luxembourg', 'malaysia', 'malta', 'mexico', 'morocco', 'netherlands', 
+    'new zealand', 'nigeria', 'norway', 'oman', 'pakistan', 'panama', 'peru', 'philippines', 
+    'poland', 'portugal', 'qatar', 'romania', 'saudi arabia', 'singapore', 'slovakia', 'slovenia', 
+    'south africa', 'south korea', 'spain', 'sweden', 'switzerland', 'taiwan', 'thailand', 
+    'türkiye', 'turkey', 'ukraine', 'united arab emirates', 'uk', 'united kingdom', 'usa', 'us', 
+    'united states', 'uruguay', 'venezuela', 'vietnam', 'usa/ca', 'worldwide'
+]
+
+def sanitize_location(location_str):
+    """
+    JobSpy crashes if the country in the location string is not supported.
+    This helper checks the location and defaults to a safe country/worldwide if invalid.
+    """
+    if not location_str:
+        return "Worldwide"
+    
+    loc_lower = location_str.lower()
+    
+    # Check if the string directly matches or ends with a valid country
+    for country in VALID_JOBSPY_COUNTRIES:
+        if loc_lower == country or loc_lower.endswith(f", {country}") or loc_lower.endswith(f" {country}"):
+            return location_str
+            
+    # If it's a specific blocked country (like North Macedonia), return a stripped version or just Worldwide
+    if "north macedonia" in loc_lower:
+        print(f"{Fore.YELLOW}Sanitizing unsupported country: {location_str} -> Remote{Fore.RESET}")
+        return "Remote"
+        
+    return location_str
+
 def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
     """
     Attempts to generate content with a primary model, 
@@ -348,9 +384,10 @@ def get_jobs():
                 print(f"Cache lookup failed: {ce}")
 
         # 3. Trigger Fresh Scrape
-        location = data.get('location') or "Remote"
+        location = sanitize_location(data.get('location') or "Remote")
         if "Worldwide" in location:
             location = "Remote"
+        
         print(f"Scraping fresh jobs for: {search_term} in {location}")
         jobs_df = scrape_jobs(
             site_name=["indeed", "linkedin", "glassdoor"],
