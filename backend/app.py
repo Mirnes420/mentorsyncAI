@@ -1,5 +1,5 @@
 import os
-from google.genai import Client
+from google.genai import Client as GeminiClient
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from scrape import scrape_job_description, scrape_resume
@@ -33,14 +33,26 @@ CORS(app, resources={
     r"/api/*": {
         "origins": allowed_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 
-# 3. AI CLIENT INITIALIZATION
+@app.errorhandler(400)
+def handle_400_error(e):
+    return jsonify({"status": "error", "message": str(e.description)}), 400
+
+@app.errorhandler(404)
+def handle_404_error(e):
+    return jsonify({"status": "error", "message": "Resource not found"}), 404
+
+@app.errorhandler(500)
+def handle_500_error(e):
+    return jsonify({"status": "error", "message": "Internal server error. Check logs."}), 500
+
 # Initialize Google Gemini Client using the modern generative AI SDK
 api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-client = Client(api_key=api_key)
+client = GeminiClient(api_key=api_key)
 
 def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
     """
@@ -96,15 +108,22 @@ def generate_cv_data():
             return jsonify({"status": "error", "message": "No resume_pdf provided"}), 400
         
         # 6. EXTERNAL SCRAPING LOGIC (PARALLELIZED)
+        job_text = request.form.get('job_text')
+        resume_text = ""
+
         with ThreadPoolExecutor(max_workers=2) as executor:
-            job_future = executor.submit(scrape_job_description, job_url)
+            # Only scrape if job_text wasn't provided manually
+            job_future = executor.submit(scrape_job_description, job_url) if not job_text else None
             resume_future = executor.submit(scrape_resume, resume_file)
             
-            job_desc = job_future.result()
+            if job_future:
+                job_desc_result = job_future.result()
+                job_text = job_desc_result
+            
             resume_text = resume_future.result()
         
-        if "Error" in job_desc:
-            return jsonify({"status": "error", "message": f"Job scraping failed: {job_desc}"}), 500
+        if not job_text or "Error" in job_text:
+            return jsonify({"status": "error", "message": f"Job content missing or scraping failed: {job_text}"}), 500
         if "Error" in resume_text:
             return jsonify({"status": "error", "message": f"Resume parsing failed: {resume_text}"}), 500
         
@@ -338,7 +357,8 @@ def get_jobs():
             search_term=search_term,
             location=location,
             results_wanted=100,
-            country_indeed='USA'
+            country_indeed='USA',
+            hours_old=24  # Getting freshest jobs as requested
         )
         
         jobs_list = jobs_df.to_dict('records')
@@ -408,15 +428,23 @@ def analyze_gap():
         
         print(f"{Fore.YELLOW}STEP 1: Prompting threads{Fore.RESET}")
         # Parallel Scraping for Gap Analysis
+        job_text = request.form.get('job_text')
+        
         with ThreadPoolExecutor(max_workers=2) as executor:
-            job_future = executor.submit(scrape_job_description, job_url)
+            job_future = executor.submit(scrape_job_description, job_url) if not job_text else None
             resume_future = executor.submit(scrape_resume, resume_file)
             
-            job_desc = job_future.result()
+            if job_future:
+                job_text = job_future.result()
+            
             resume_text = resume_future.result()
 
-        if "Error" in job_desc:
-            return jsonify({"status": "error", "message": f"Job scraping failed: {job_desc}"}), 500
+        if "Error" in job_text:
+            print(f"{Fore.RED}Scraping blocked for URL: {job_url}{Fore.RESET}")
+            return jsonify({
+                "status": "blocked", 
+                "message": "Indeed/Board blocked our automated scan. Please paste the job text below for an instant analysis."
+            }), 200
             
         response = generate_with_fallback(f"""
             ROLE: Expert Technical Recruiter.
@@ -426,7 +454,7 @@ def analyze_gap():
             Goal: Identify the top 3-5 technical skills or experiences strictly required by the JD that are MISSING or NOT EXPLICITLY STATED in the Resume.
 
             INPUTS:
-            - Job Description: {job_desc}
+            - Job Description: {job_text}
             - Candidate Resume: {resume_text}
 
             CRITICAL INSTRUCTIONS:
@@ -472,13 +500,13 @@ def analyze_gap():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 import os
-from supabase import create_client, Client
+from supabase import create_client, Client as SupabaseClient
 
 # Initialize Supabase Client
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-supabase: Client = None
+supabase: SupabaseClient = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 else:
