@@ -35,7 +35,8 @@ def scrape_job_description(url):
     try:
         driver.get(url)
         # Wait for the anti-bot check and content load
-        time.sleep(7) 
+        # Using a shorter wait for speed, though some sites might need more.
+        time.sleep(4) 
         
         # 1. Try to get ONLY the central container first (RemoteRocketship uses div.description)
         selector = "div.description"

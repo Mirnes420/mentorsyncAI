@@ -24,7 +24,14 @@ export function InteractiveQA({ questions, onSubmit, isLoading }: InteractiveQAP
     const [currentIdx, setCurrentIdx] = useState(0);
     const [customDetail, setCustomDetail] = useState("");
 
-    if (!questions || questions.length === 0) return null;
+    if (!questions || questions.length === 0) {
+        return (
+            <Card className="w-full max-w-2xl mx-auto shadow-lg border-primary/20 bg-card p-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                <p className="mt-4 text-muted-foreground">Loading questions...</p>
+            </Card>
+        );
+    }
 
     const currentQ = questions[currentIdx];
     const isLast = currentIdx === questions.length - 1;

@@ -1,6 +1,6 @@
 import requests
 
-url = "http://127.0.0.1:5555/api/jobs"
+url = "http://127.0.0.1:10000/api/jobs"
 payload = {
     'search_term': 'software engineer',
     'location': 'Remote',

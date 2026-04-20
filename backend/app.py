@@ -9,6 +9,8 @@ from colorama import Fore
 import base64
 from pdf_generator import generate_styled_cv
 import requests
+from concurrent.futures import ThreadPoolExecutor
+import json
 # 1. ENVIRONMENT & CONFIGURATION
 # Load environment variables (API keys, etc.) from .env file for security
 if not os.environ.get("DOCKER_CONTAINER"):
@@ -21,7 +23,10 @@ app = Flask(__name__)
 # Define your allowed origins
 allowed_origins = [
     "http://localhost:8080",
-    "https://mentorsync-swart.vercel.app"
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://mentorsync-swart.vercel.app",
+    "https://mentorsyncai.gentlemansolutions.com"
 ]
 
 CORS(app, resources={
@@ -34,7 +39,32 @@ CORS(app, resources={
 
 # 3. AI CLIENT INITIALIZATION
 # Initialize Google Gemini Client using the modern generative AI SDK
-client = Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+client = Client(api_key=api_key)
+
+def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
+    """
+    Attempts to generate content with a primary model, 
+    falls back to a secondary if the primary is unavailable (503).
+    """
+    fallbacks = [primary_model, 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite','gemini-1.5-flash']
+    
+    for model_name in fallbacks:
+        try:
+            print(f"Attempting generation with: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents
+            )
+            return response
+        except Exception as e:
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                print(f"Model {model_name} busy. Trying next fallback...")
+                continue
+            else:
+                # If it's a different error (like 400), raise it immediately
+                raise e
+    raise Exception("All Gemini models are currently unavailable.")
 
 # Set Hunter API key if available
 HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY")
@@ -65,9 +95,18 @@ def generate_cv_data():
         if not resume_file:
             return jsonify({"status": "error", "message": "No resume_pdf provided"}), 400
         
-        # 6. EXTERNAL SCRAPING LOGIC
-        job_desc = scrape_job_description(job_url)
-        resume_text = scrape_resume(resume_file)
+        # 6. EXTERNAL SCRAPING LOGIC (PARALLELIZED)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            job_future = executor.submit(scrape_job_description, job_url)
+            resume_future = executor.submit(scrape_resume, resume_file)
+            
+            job_desc = job_future.result()
+            resume_text = resume_future.result()
+        
+        if "Error" in job_desc:
+            return jsonify({"status": "error", "message": f"Job scraping failed: {job_desc}"}), 500
+        if "Error" in resume_text:
+            return jsonify({"status": "error", "message": f"Resume parsing failed: {resume_text}"}), 500
         
         # HUNTER.IO LOGIC
         contact_emails = []
@@ -91,9 +130,7 @@ def generate_cv_data():
             answers_context = f"\n\nADDITIONAL CONTEXT FROM CANDIDATE:\nThe candidate was asked about missing skills, and provided these answers:\n{user_answers}\nIncorporate these confirmed skills into the tailored CV as if they were in the original resume. If they answered 'No', DO NOT add them."
 
         # 7. AI ENGINE / PROMPT ENGINEERING
-        response = client.models.generate_content(
-            model='gemini-2.5-flash-lite', 
-            contents = f"""
+        response = generate_with_fallback(f"""
             ROLE: Expert Career Coach & Resume Writer.
 
             CONTEXT:
@@ -368,12 +405,18 @@ def analyze_gap():
         if not resume_file:
             return jsonify({"status": "error", "message": "No resume_pdf provided"}), 400
             
-        job_desc = scrape_job_description(job_url)
-        resume_text = scrape_resume(resume_file)
+        # Parallel Scraping for Gap Analysis
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            job_future = executor.submit(scrape_job_description, job_url)
+            resume_future = executor.submit(scrape_resume, resume_file)
+            
+            job_desc = job_future.result()
+            resume_text = resume_future.result()
 
-        response = client.models.generate_content(
-            model='gemini-2.5-flash-lite', 
-            contents = f"""
+        if "Error" in job_desc:
+            return jsonify({"status": "error", "message": f"Job scraping failed: {job_desc}"}), 500
+            
+        response = generate_with_fallback(f"""
             ROLE: Expert Technical Recruiter.
 
             CONTEXT:

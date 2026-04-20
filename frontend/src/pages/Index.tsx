@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 // Icons
 import {
@@ -32,6 +32,7 @@ import { ColdEmailPanel } from '@/components/ColdEmailPanel';
 import { CvEditor } from '@/components/CvEditor';
 
 type Step = 'UPLOAD' | 'JOBS' | 'QA' | 'EDIT_CV' | 'RESULTS';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://mentorsyncai.onrender.com';
 
 const Index = () => {
   // --- Navigation & App State ---
@@ -67,6 +68,7 @@ const Index = () => {
   // --- Persistence State ---
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
 
   // --- Filter States ---
   const [searchDraft, setSearchDraft] = useState('');
@@ -158,7 +160,7 @@ const Index = () => {
       if (searchTerm) formData.append('search_term', searchTerm);
       formData.append('location', userLocation);
 
-      const response = await fetch('https://mentorsyncai.onrender.com/api/jobs', {
+      const response = await fetch(`${API_BASE_URL}/api/jobs`, {
         method: 'POST',
         body: formData,
       });
@@ -191,7 +193,7 @@ const Index = () => {
       formData.append('resume_pdf', file);
       formData.append('job_url', job.job_url);
 
-      const response = await fetch('https://mentorsyncai.onrender.com/api/analyze-gap', {
+      const response = await fetch(`${API_BASE_URL}/api/analyze-gap`, {
         method: 'POST',
         body: formData,
       });
@@ -225,7 +227,7 @@ const Index = () => {
         formData.append('user_answers', JSON.stringify(userAnswers));
       }
 
-      const response = await fetch('https://mentorsyncai.onrender.com/api/generate-cv-data', {
+      const response = await fetch(`${API_BASE_URL}/api/generate-cv-data`, {
         method: 'POST',
         body: formData,
       });
@@ -262,7 +264,7 @@ const Index = () => {
   const handleFinalizePdf = async (editedData: any) => {
     setIsRenderingPdf(true);
     try {
-      const response = await fetch('https://mentorsyncai.onrender.com/api/render-pdf', {
+      const response = await fetch(`${API_BASE_URL}/api/render-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editedData),
@@ -462,17 +464,41 @@ const Index = () => {
                   <ChevronLeft className="w-4 h-4" /> Back to Upload
                 </Button>
                 <div className="flex items-center gap-2">
-                  <Dialog>
+                  <Dialog open={isPremiumModalOpen} onOpenChange={setIsPremiumModalOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm" className="gap-2 border-primary/30 text-primary">
                         <Sparkles className="w-4 h-4" /> Premium CV Match
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-md text-center">
-                      <Sparkles className="w-12 h-12 text-primary mx-auto mb-4" />
-                      <h3 className="text-xl font-bold">Smart CV Matching</h3>
-                      <p className="text-muted-foreground mb-4">Upload to find roles where your skills are a perfect match.</p>
-                      <PdfUploader file={file} onFileChange={(f) => { setFile(f); if (f) handleFindJobs(true); }} />
+                    <DialogContent className="sm:max-w-md max-h-[95vh] flex flex-col p-0 overflow-hidden">
+                      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                        <DialogHeader className="flex flex-col items-center text-center">
+                          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                            <Sparkles className="w-8 h-8 text-primary" />
+                          </div>
+                          <DialogTitle className="text-2xl">Smart CV Matching</DialogTitle>
+                          <DialogDescription className="text-base mt-2">
+                            Upload or use your saved resume to find matching roles where your skills are a perfect match.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="py-6">
+                          <PdfUploader file={file} onFileChange={(f) => { setFile(f); if (f) { handleFindJobs(true); setIsPremiumModalOpen(false); } }} />
+                        </div>
+                      </div>
+
+                      {file && (
+                        <DialogFooter className="p-6 border-t bg-muted/30 sm:flex-col">
+                          <Button 
+                            onClick={() => { handleFindJobs(true); setIsPremiumModalOpen(false); }} 
+                            disabled={isFetchingJobs} 
+                            className="w-full h-12 font-bold gap-2 text-base shadow-lg shadow-primary/20"
+                          >
+                            {isFetchingJobs ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                            Find Matches with this CV
+                          </Button>
+                        </DialogFooter>
+                      )}
                     </DialogContent>
                   </Dialog>
                   <Button variant="ghost" size="sm" onClick={() => handleFindJobs(true)} disabled={isFetchingJobs} className="gap-2">
@@ -558,7 +584,11 @@ const Index = () => {
                 <Button variant="ghost" onClick={() => setStep('JOBS')} className="mb-6"><ChevronLeft className="mr-2" /> Cancel</Button>
                 <InteractiveQA questions={questions as any} onSubmit={handleTailorWithAnswers} isLoading={isTailoring} />
               </div>
-            ) : null}
+            ) : (
+              <div className="text-center space-y-4">
+                <p className="text-muted-foreground animate-pulse">Preparing your experience analysis...</p>
+              </div>
+            )}
           </div>
         )}
 
