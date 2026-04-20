@@ -28,7 +28,14 @@ RUN pip install --no-cache-dir seleniumbase==4.46.5 --no-deps
 # 5. INSTALL THE REST (Which no longer contains the conflicting packages)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Pre-install the drivers so they aren't downloaded at runtime
+RUN sbase install chromedriver
+RUN sbase install uc_driver
+
+# Set environment variable to tell SeleniumBase where to find them
+ENV SELENIUMBASE_GECKODRIVER_PATH=/usr/local/lib/python3.11/site-packages/seleniumbase/drivers/
 
 COPY . .
 
-CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1"]
+# Added logging flags: --access-logfile and --error-logfile
+CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --threads 4 --access-logfile - --error-logfile -"]
