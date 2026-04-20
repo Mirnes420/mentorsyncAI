@@ -4,7 +4,8 @@ from flask import jsonify
 from pypdf import PdfReader
 import re
 import os
-
+import requests
+from colorama import Fore, Style
 # 1. SCRAPING FUNCTIONALITY FOR RESUME DATA EXTRACTION
 def scrape_resume(resume_file):
     if not resume_file:
@@ -30,33 +31,21 @@ def scrape_resume(resume_file):
 
 # 2. SCRAPING FUNCTIONALITY FOR JOB DESCRIPTION EXTRACTION FROM A WE
 def scrape_job_description(url):
-    driver = Driver(uc=True, headless=True)
+    print(f"{Fore.CYAN}Scraping via Jina: {url}{Fore.RESET}")
     
     try:
-        driver.get(url)
-        # Wait for the anti-bot check and content load
-        # Using a shorter wait for speed, though some sites might need more.
-        time.sleep(4) 
+        # Jina Reader API: Just prefix the URL with https://r.jina.ai/
+        jina_url = f"https://r.jina.ai/{url}"
         
-        # 1. Try to get ONLY the central container first (RemoteRocketship uses div.description)
-        selector = "div.description"
-        job_text = ""
+        # We set a timeout to ensure the app doesn't hang forever
+        response = requests.get(jina_url, timeout=20)
+        
+        if response.status_code != 200:
+            return f"Error: Jina was unable to scrape the site (Status {response.status_code})"
 
-        if driver.is_element_visible(selector):
-            job_text = driver.get_text(selector)
-        else:
-            # Fallbacks for other boards
-            fallbacks = [".job-description", "#jobDescriptionText", "article", "main"]
-            for f in fallbacks:
-                if driver.is_element_visible(f):
-                    job_text = driver.get_text(f)
-                    break
-            
-            if not job_text:
-                job_text = driver.get_text("body")
+        job_text = response.text
 
-        # 2. CLEANING LOGIC (The Fine-Tuning)
-        # We chop off everything after the common "Footer" phrases start
+        # 1. CLEANING LOGIC (Still useful for removing footer junk)
         stop_words = [
             "Discover 100,000+", 
             "Join now to find your dream", 
@@ -69,16 +58,14 @@ def scrape_job_description(url):
             if word in job_text:
                 job_text = job_text.split(word)[0]
 
-        # 3. Final Polish: Remove extra whitespace and leading/trailing junk
-        job_text = job_text.strip()
+        # 2. Final Polish
+        # Jina returns Markdown, so we just strip whitespace
+        final_text = job_text.strip()
         
-        # Remove common header junk if it was captured
-        # (e.g., if the scrape started way too high up)
-        job_text = re.sub(r'^(🌐|Worldwide|Post a Job|Affiliates|Search).*?\n', '', job_text, flags=re.IGNORECASE | re.MULTILINE)
+        if len(final_text) < 100:
+            return "Error: Scraped content is too short. Cloudflare might still be blocking the proxy."
 
-        return job_text.strip()
+        return final_text
 
     except Exception as e:
         return f"Error: {str(e)}"
-    finally:
-        driver.quit()
