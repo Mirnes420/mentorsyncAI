@@ -194,7 +194,7 @@ def generate_cv_data():
             IMPORTANT: Preserve ALL content from the candidate's original resume. Do NOT drop any sections. If the candidate has projects, certifications, languages, volunteer work, or awards in their resume, INCLUDE THEM in the output.
 
             INPUTS:
-            - Job Description: {job_desc}
+            - Job Description: {job_text}
             - Candidate Resume: {resume_text}{answers_context}
             - Contact Info Found: {hunter_context}
 
