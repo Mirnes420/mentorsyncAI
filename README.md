@@ -1,7 +1,7 @@
 
 
+https://github.com/user-attachments/assets/4d7f0cf2-6a51-49e9-9943-0528871b2c01
 
-https://github.com/user-attachments/assets/74d27c0b-81e1-427a-a8d0-cc78a7f3016c
 
 
 # MentorSync AI | Full-Stack Recruitment Intelligence 🚀
