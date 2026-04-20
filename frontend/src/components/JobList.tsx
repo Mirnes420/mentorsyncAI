@@ -12,6 +12,7 @@ export interface Job {
   description: string;
   job_url: string;
   job_type?: string;
+  site?: string;
 }
 
 interface JobListProps {
@@ -44,6 +45,11 @@ function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: J
           </div>
           {job.job_type && (
             <Badge variant="secondary">{job.job_type}</Badge>
+          )}
+          {job.site && (
+            <Badge variant="outline" className="capitalize bg-primary/5 text-primary border-primary/20">
+              {job.site}
+            </Badge>
           )}
         </div>
       </CardHeader>

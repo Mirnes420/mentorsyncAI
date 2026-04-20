@@ -8,6 +8,7 @@ import { PdfUploader } from '@/components/PdfUploader';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,6 +59,8 @@ const Index = () => {
 
   // --- Analysis & Results State ---
   const [isAnalyzingGap, setIsAnalyzingGap] = useState(false);
+  const [isScrapingBlocked, setIsScrapingBlocked] = useState(false);
+  const [manualJobText, setManualJobText] = useState('');
   const [isTailoring, setIsTailoring] = useState(false);
   const [isRenderingPdf, setIsRenderingPdf] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
@@ -186,6 +189,8 @@ const Index = () => {
     if (!file) return;
     setSelectedJob(job);
     setIsAnalyzingGap(true);
+    setIsScrapingBlocked(false);
+    setManualJobText('');
     setStep('QA');
 
     try {
@@ -201,27 +206,76 @@ const Index = () => {
       if (!response.ok) throw new Error('Gap analysis failed');
 
       const data = await response.json();
-      if (data.status === "success" && data.data?.questions) {
+      if (data.status === "blocked") {
+        setIsScrapingBlocked(true);
+        return;
+      }
+
+      if (data.status === "success" && data.data?.questions && data.data.questions.length > 0) {
         setQuestions(data.data.questions);
       } else {
-        handleTailorWithAnswers({});
+        // No questions or success without questions - jump to tailoring
+        handleTailorWithAnswers({}, job);
       }
     } catch (error: any) {
       console.error('Analysis failed:', error);
-      handleTailorWithAnswers({});
+      handleTailorWithAnswers({}, job);
     } finally {
       setIsAnalyzingGap(false);
     }
   };
 
-  const handleTailorWithAnswers = async (userAnswers: Record<string, string>) => {
-    if (!file || !selectedJob) return;
+  const handleManualJobSubmit = () => {
+    if (!manualJobText || !selectedJob || !file) return;
+    
+    const runAnalysisWithText = async () => {
+      setIsAnalyzingGap(true);
+      try {
+        const formData = new FormData();
+        formData.append('resume_pdf', file);
+        formData.append('job_url', selectedJob.job_url);
+        formData.append('job_text', manualJobText); // Sending the manual text
+
+        const response = await fetch(`${API_BASE_URL}/api/analyze-gap`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (data.status === "success" && data.data?.questions && data.data.questions.length > 0) {
+          setQuestions(data.data.questions);
+          setIsScrapingBlocked(false);
+        } else {
+          // If no questions found in the manual text, tailor immediately
+          handleTailorWithAnswers({}, selectedJob, manualJobText);
+        }
+      } catch (error) {
+        console.error('Manual submission failed:', error);
+        handleTailorWithAnswers({}, selectedJob, manualJobText);
+      } finally {
+        setIsAnalyzingGap(false);
+      }
+    };
+
+    runAnalysisWithText();
+  };
+
+  const handleTailorWithAnswers = async (userAnswers: Record<string, string>, jobOverride?: Job, textOverride?: string) => {
+    const targetJob = jobOverride || selectedJob;
+    const targetText = textOverride || manualJobText;
+    
+    if (!file || !targetJob) {
+      console.error("Missing file or job for tailoring", { file: !!file, job: !!targetJob });
+      return;
+    }
+    
     setIsTailoring(true);
 
     try {
       const formData = new FormData();
       formData.append('resume_pdf', file);
-      formData.append('job_url', selectedJob.job_url);
+      formData.append('job_url', targetJob.job_url);
+      if (targetText) formData.append('job_text', targetText);
 
       if (Object.keys(userAnswers).length > 0) {
         formData.append('user_answers', JSON.stringify(userAnswers));
@@ -578,6 +632,37 @@ const Index = () => {
               <div className="text-center space-y-6">
                 <Loader2 className="w-16 h-16 text-primary animate-spin mx-auto" />
                 <h3 className="text-2xl font-bold">Tailoring Your Expertise...</h3>
+              </div>
+            ) : isScrapingBlocked ? (
+              <div className="w-full max-w-2xl space-y-6 animate-in fade-in zoom-in duration-300">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <X className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-bold">Scraping Blocked</h3>
+                  <p className="text-muted-foreground text-lg">
+                    Indeed blocked our automated scan. Please paste the job text below for an instant analysis.
+                  </p>
+                </div>
+                
+                <div className="space-y-4">
+                  <Textarea 
+                    placeholder="Paste the job description here..."
+                    className="min-h-[300px] text-base p-4 resize-none focus-visible:ring-primary"
+                    value={manualJobText}
+                    onChange={(e) => setManualJobText(e.target.value)}
+                  />
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={() => setStep('JOBS')} className="flex-1 h-12">Cancel</Button>
+                    <Button 
+                      disabled={!manualJobText.trim()} 
+                      onClick={handleManualJobSubmit}
+                      className="flex-[2] h-12 font-bold text-lg shadow-lg shadow-primary/20"
+                    >
+                      Start Instant Analysis
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : questions.length > 0 ? (
               <div className="w-full max-w-4xl">
