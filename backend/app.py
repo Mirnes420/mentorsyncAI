@@ -392,6 +392,7 @@ def get_jobs():
 
 @app.route('/api/analyze-gap', methods=['POST'])
 def analyze_gap():
+    print(f"{Fore.YELLOW}STEP 1: Request received{Fore.RESET}")
     """
     Step 1 of Interactive Flow: 
     Analyzes job description and resume, then returns 3-5 Yes/No questions about missing skills.
@@ -404,7 +405,8 @@ def analyze_gap():
             return jsonify({"status": "error", "message": "No job_url provided"}), 400
         if not resume_file:
             return jsonify({"status": "error", "message": "No resume_pdf provided"}), 400
-            
+        
+        print(f"{Fore.YELLOW}STEP 1: Prompting threads{Fore.RESET}")
         # Parallel Scraping for Gap Analysis
         with ThreadPoolExecutor(max_workers=2) as executor:
             job_future = executor.submit(scrape_job_description, job_url)
