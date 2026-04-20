@@ -1,0 +1,8 @@
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend:/app  # This "syncs" your local code to the container
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
