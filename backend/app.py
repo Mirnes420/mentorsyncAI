@@ -384,9 +384,9 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
 def get_jobs():
     try:
         # Use .get() to avoid KeyErrors
-        data = request.form
-        resume_file = request.files.get('resume_pdf')
+        data = request.get_json(silent=True) or request.form
         search_term = data.get('search_term')
+        resume_file = request.files.get('resume_pdf')
         
         # 1. Determine Search Term
         if resume_file:
@@ -403,7 +403,7 @@ def get_jobs():
         location = data.get('location') or "Remote"
         print(f"DEBUG: Fetching fresh jobs for: {search_term} in {location}")
         
-        cleaned_jobs = fetch_adzuna_jobs(search_term, location)
+        cleaned_jobs = fetch_adzuna_jobs(search_term)
 
         # 3. Handle No Results gracefully (Prevents the 404 in Frontend)
         if not cleaned_jobs:
