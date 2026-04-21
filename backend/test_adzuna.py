@@ -1,24 +1,22 @@
 import os
-import requests
 from dotenv import load_dotenv
-from flask import jsonify
+import requests
+import re
 
 load_dotenv()
 
 def fetch_adzuna_jobs(search_term, location="Remote"):
-    # Get these from Adzuna Developer Dashboard
     app_id = os.environ.get("ADZUNA_APP_ID")
     app_key = os.environ.get("ADZUNA_APP_KEY")
     
-    # Adzuna uses country codes (us, gb, etc.)
     url = f"https://api.adzuna.com/v1/api/jobs/us/search/1"
     
     params = {
         "app_id": app_id,
         "app_key": app_key,
-        "results_per_page": 50,
-        "what": f"{search_term} remote",  # Add 'remote' to the keywords
-        "where": "",                     # Leave location empty for global US remote
+        "results_per_page": 10, # Reduced for cleaner terminal output
+        "what": search_term,
+        "where": location,
         "content-type": "application/json"
     }
 
@@ -26,16 +24,19 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            print(f"Total jobs found: {data.get('count')}")
+            raw_results = data.get('results', [])
+            
             jobs = []
-            for j in data.get('results', []):
+            for j in raw_results:
+                # Helper to strip HTML tags from Adzuna descriptions
+                clean_desc = re.sub('<[^<]+?>', '', j.get("description", ""))
+                
                 jobs.append({
-                    "title": j.get("title"),
+                    "title": j.get("title").strip(),
                     "company": j.get("company", {}).get("display_name"),
                     "location": j.get("location", {}).get("display_name"),
                     "job_url": j.get("redirect_url"),
-                    "site": "adzuna",
-                    "description": j.get("description") # Often includes a snippet!
+                    "description": clean_desc[:150] + "..." # Snippet for readability
                 })
             return jobs
         return []
@@ -43,46 +44,20 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
         print(f"Adzuna Error: {e}")
         return []
 
+# --- NICE PRINTING LOGIC ---
+results = fetch_adzuna_jobs("software engineer", "ba")
 
-def get_jobs():
-    try:
-        # Use .get() to avoid KeyErrors
-        search_term = "software engineer"
-        
+if not results:
+    print("No jobs found or API error.")
+else:
+    print(f"\n{'='*80}")
+    print(f" FOUND {len(results)} JOBS ")
+    print(f"{'='*80}\n")
 
-        # Default fallback
-        if not search_term or search_term.lower() == "undefined":
-            search_term = "software engineer"
-
-        # 2. Skip Cache Lookup (Ensures 'freshest always')
-        # We go straight to the source
-        location = "Remote"
-        print(f"DEBUG: Fetching fresh jobs for: {search_term} in {location}")
-        
-        cleaned_jobs = fetch_adzuna_jobs(search_term)
-
-        # 3. Handle No Results gracefully (Prevents the 404 in Frontend)
-        if not cleaned_jobs:
-            print(f"DEBUG: No jobs found for {search_term}")
-            return jsonify({
-                "status": "success",
-                "jobs": [],
-                "message": "No fresh jobs found at this moment.",
-                "search_term": search_term
-            })
-        
-        print("clean jobs from adzuna", cleaned_jobs)
-        return jsonify({
-            "status": "success",
-            "jobs": cleaned_jobs,
-            "search_term": search_term,
-            "source": "adzuna_api"
-        })
-
-    except Exception as e:
-        print(f"CRITICAL ERROR in get_jobs: {str(e)}")
-        # Return 200 with an error status so the Frontend doesn't crash on a 404/500
-        return jsonify({"status": "error", "message": "Server encountered an issue fetching jobs"}), 200
-
-
-get_jobs()
+    for idx, job in enumerate(results, 1):
+        print(f"[{idx}] {job['title'].upper()}")
+        print(f"    🏢 Company:  {job['company']}")
+        print(f"    📍 Location: {job['location']}")
+        print(f"    🔗 URL:      {job['job_url']}")
+        print(f"    📝 Desc:     {job['description']}")
+        print(f"{'-'*80}")
