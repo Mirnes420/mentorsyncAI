@@ -58,6 +58,7 @@ const Index = () => {
   const [manualJobUrl, setManualJobUrl] = useState('');
 
   // --- Analysis & Results State ---
+  const [isFetchingFullJob, setIsFetchingFullJob] = useState(false);
   const [isAnalyzingGap, setIsAnalyzingGap] = useState(false);
   const [isScrapingBlocked, setIsScrapingBlocked] = useState(false);
   const [manualJobText, setManualJobText] = useState('');
@@ -188,15 +189,30 @@ const Index = () => {
   const handleSelectJob = async (job: Job) => {
     if (!file) return;
     setSelectedJob(job);
-    setIsAnalyzingGap(true);
+    setIsFetchingFullJob(true);
     setIsScrapingBlocked(false);
     setManualJobText('');
     setStep('QA');
 
     try {
+      // 1. Fetch Full Description derived from snippet (Adzuna migration)
+      const fetchResp = await fetch(`${API_BASE_URL}/api/analyze-job`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_url: job.job_url }),
+      });
+      
+      const fetchResult = await fetchResp.json();
+      const fullText = fetchResult.full_text || job.description;
+
+      setIsFetchingFullJob(false);
+      setIsAnalyzingGap(true);
+
+      // 2. Run Gap Analysis with the FULL text
       const formData = new FormData();
       formData.append('resume_pdf', file);
       formData.append('job_url', job.job_url);
+      formData.append('job_text', fullText); // Using full text cached/scraped
 
       const response = await fetch(`${API_BASE_URL}/api/analyze-gap`, {
         method: 'POST',
@@ -623,7 +639,20 @@ const Index = () => {
 
         {step === 'QA' && (
           <div className="flex flex-col h-[85dvh] items-center justify-center px-4">
-            {isAnalyzingGap ? (
+            {isFetchingFullJob ? (
+              <div className="text-center space-y-6 max-w-md animate-in fade-in zoom-in duration-500">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-150 animate-pulse" />
+                  <Loader2 className="w-16 h-16 text-primary animate-spin mx-auto relative z-10" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold tracking-tight">Accessing Full Details...</h3>
+                  <p className="text-muted-foreground">
+                    Grabbing the complete job description for a highly accurate skill-gap analysis.
+                  </p>
+                </div>
+              </div>
+            ) : isAnalyzingGap ? (
               <div className="text-center space-y-4">
                 <Sparkles className="w-12 h-12 text-primary animate-pulse mx-auto" />
                 <h3 className="text-xl font-medium animate-pulse">Analyzing Skills Gap...</h3>

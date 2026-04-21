@@ -1,22 +1,39 @@
 import os
-from google.genai import Client as GeminiClient
-from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-from scrape import scrape_job_description, scrape_resume
-from flask_cors import CORS
-from colorama import Fore
-
-import base64
-from pdf_generator import generate_styled_cv
-import requests
-from concurrent.futures import ThreadPoolExecutor
+import re
+import math
 import json
-# 1. ENVIRONMENT & CONFIGURATION
-# Load environment variables (API keys, etc.) from .env file for security
-if not os.environ.get("DOCKER_CONTAINER"):
-    load_dotenv()
+import base64
+import requests
+from typing import Any, Dict, List
+from concurrent.futures import ThreadPoolExecutor
 
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+from colorama import Fore
+from google.genai import Client as GeminiClient
+from supabase import create_client, Client as SupabaseClient
+
+from scrape import scrape_job_description, scrape_resume
+from pdf_generator import generate_styled_cv
+
+# 1. APP CONFIGURATION
+load_dotenv()
 app = Flask(__name__)
+
+# Initialize Clients
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+supabase: SupabaseClient = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"{Fore.RED}Failed to init Supabase: {e}{Fore.RESET}")
+
+gemini_client = GeminiClient(api_key=GOOGLE_API_KEY)
 
 # 2. SECURITY & CROSS-ORIGIN RESOURCE SHARING
 # Restricting CORS to local development port to prevent unauthorized external access
@@ -46,51 +63,8 @@ def handle_400_error(e):
 def handle_404_error(e):
     return jsonify({"status": "error", "message": "Resource not found"}), 404
 
-@app.errorhandler(500)
-def handle_500_error(e):
-    return jsonify({"status": "error", "message": "Internal server error. Check logs."}), 500
-
-# Initialize Google Gemini Client using the modern generative AI SDK
-api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-client = GeminiClient(api_key=api_key)
-
-# 4. JOBSPY CONFIGURATION
-VALID_JOBSPY_COUNTRIES = [
-    'argentina', 'australia', 'austria', 'bahrain', 'bangladesh', 'belgium', 'bulgaria', 'brazil', 
-    'canada', 'chile', 'china', 'colombia', 'costa rica', 'croatia', 'cyprus', 'czech republic', 
-    'czechia', 'denmark', 'ecuador', 'egypt', 'estonia', 'finland', 'france', 'germany', 'greece', 
-    'hong kong', 'hungary', 'india', 'indonesia', 'ireland', 'israel', 'italy', 'japan', 'kuwait', 
-    'latvia', 'lithuania', 'luxembourg', 'malaysia', 'malta', 'mexico', 'morocco', 'netherlands', 
-    'new zealand', 'nigeria', 'norway', 'oman', 'pakistan', 'panama', 'peru', 'philippines', 
-    'poland', 'portugal', 'qatar', 'romania', 'saudi arabia', 'singapore', 'slovakia', 'slovenia', 
-    'south africa', 'south korea', 'spain', 'sweden', 'switzerland', 'taiwan', 'thailand', 
-    'türkiye', 'turkey', 'ukraine', 'united arab emirates', 'uk', 'united kingdom', 'usa', 'us', 
-    'united states', 'uruguay', 'venezuela', 'vietnam', 'usa/ca', 'worldwide'
-]
-
-def sanitize_location(location_str):
-    """
-    JobSpy crashes if the country in the location string is not supported.
-    This helper checks the location and defaults to a safe country/worldwide if invalid.
-    """
-    if not location_str:
-        return "Worldwide"
-    
-    loc_lower = location_str.lower()
-    
-    # Check if the string directly matches or ends with a valid country
-    for country in VALID_JOBSPY_COUNTRIES:
-        if loc_lower == country or loc_lower.endswith(f", {country}") or loc_lower.endswith(f" {country}"):
-            return location_str
-            
-    # If it's a specific blocked country (like North Macedonia), return a stripped version or just Worldwide
-    if "north macedonia" in loc_lower:
-        print(f"{Fore.YELLOW}Sanitizing unsupported country: {location_str} -> Remote{Fore.RESET}")
-        return "Remote"
-        
-    return location_str
-
 def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
+
     """
     Attempts to generate content with a primary model, 
     falls back to a secondary if the primary is unavailable (503).
@@ -295,6 +269,7 @@ def generate_cv_data():
         return jsonify({"status": "error", "message": "Internal processing error. Check server logs."}), 500
 
 @app.route('/api/render-pdf', methods=['POST'])
+
 def render_pdf():
     """
     Step 3: Takes (potentially edited) structured CV JSON and returns a PDF as base64.
@@ -316,9 +291,36 @@ def render_pdf():
         print(f"RENDER ERROR: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-import re
-from jobspy import scrape_jobs
 
+@app.route('/api/analyze-job', methods=['POST'])
+def analyze_specific_job():
+    data = request.json
+    job_url = data.get('job_url')
+    
+    if not supabase:
+        full_text = scrape_job_description(job_url)
+        return jsonify({"full_text": full_text, "source": "fresh_scrape_no_db"})
+
+    # 1. Check if we already have this job in ScrapedJobs with a long (full) description
+    existing = supabase.table("ScrapedJobs").select("description").eq("job_url", job_url).maybe_single().execute()
+    
+    # If description > 500 chars, it's likely already been scraped/full
+    if existing.data and existing.data.get('description') and len(existing.data['description']) > 500:
+        return jsonify({"full_text": existing.data['description'], "source": "cache"})
+
+    # 2. If not full, do the heavy scrape (Jina)
+    full_text = scrape_job_description(job_url) 
+    
+    # 3. Update ScrapedJobs so the next user gets it instantly
+    if "Error" not in full_text[:10]:
+        try:
+            supabase.table("ScrapedJobs").update({"description": full_text}).eq("job_url", job_url).execute()
+        except Exception as e:
+             print(f"Failed to update description cache: {e}")
+    
+    return jsonify({"full_text": full_text, "source": "fresh_scrape"})
+
+    
 def extract_keywords_from_resume(text):
     """
     Very basic keyword/title extraction based on common skills.
@@ -345,22 +347,19 @@ def extract_keywords_from_resume(text):
     print(f"Extracted search term: {search_term}")
     return search_term
 
-
-
 def fetch_adzuna_jobs(search_term, location="Remote"):
     # Get these from Adzuna Developer Dashboard
     app_id = os.environ.get("ADZUNA_APP_ID")
     app_key = os.environ.get("ADZUNA_APP_KEY")
     
-    # Adzuna uses country codes (us, gb, etc.)
     url = f"https://api.adzuna.com/v1/api/jobs/us/search/1"
     
     params = {
         "app_id": app_id,
         "app_key": app_key,
         "results_per_page": 50,
-        "what": f"{search_term} remote",  # Add 'remote' to the keywords
-        "where": "",                     # Leave location empty for global US remote
+        "what": f"{search_term} remote",
+        "where": "",
         "content-type": "application/json"
     }
 
@@ -370,13 +369,22 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
             data = response.json()
             jobs = []
             for j in data.get('results', []):
+                # Try to extract a better source from the redirect URL if possible
+                redirect_url = j.get('redirect_url', '').lower()
+                site_source = "adzuna"
+                if "linkedin.com" in redirect_url: site_source = "linkedin"
+                elif "indeed.com" in redirect_url: site_source = "indeed"
+                elif "glassdoor.com" in redirect_url: site_source = "glassdoor"
+                elif "ziprecruiter.com" in redirect_url: site_source = "ziprecruiter"
+                elif "dice.com" in redirect_url: site_source = "dice"
+                
                 jobs.append({
                     "title": j.get("title"),
                     "company": j.get("company", {}).get("display_name"),
                     "location": j.get("location", {}).get("display_name"),
                     "job_url": j.get("redirect_url"),
-                    "site": "adzuna",
-                    "description": j.get("description") # Often includes a snippet!
+                    "site": site_source,
+                    "description": j.get("description")
                 })
             return jobs
         return []
@@ -450,6 +458,7 @@ def get_jobs():
                         "location": j.get("location"),
                         "job_url": j.get("job_url"),
                         "site": j.get("site"),
+                        "description": j.get("description"), # Save snippet initially
                         "search_term": search_term
                     })
                 
@@ -558,21 +567,7 @@ def analyze_gap():
         print(f"Error in analyze_gap: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-import os
-from supabase import create_client, Client as SupabaseClient
-
-# Initialize Supabase Client
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-
-supabase: SupabaseClient = None
-if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-else:
-    print("SUPABASE_URL", SUPABASE_URL)
-    print("SUPABASE_KEY", SUPABASE_KEY)
-    print("WARNING: Supabase credentials not found. DB features will not work.")
-
+supabase: SupabaseClient = None # Removed duplicate init
 @app.route('/api/save-job', methods=['POST'])
 def save_job():
     """
