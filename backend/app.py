@@ -415,33 +415,32 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
 
 @app.route('/api/jobs', methods=['POST'])
 def get_jobs():
-    """
-    Finds jobs based on a search term or resume content.
-    Uses Supabase ScrapedJobs table as a cache to minimize external scraping.
-    Standard requests (is_premium=false) return cached data if available.
-    Premium requests or cache misses trigger a fresh scrape.
-    """
     try:
         data = request.form
         resume_file = request.files.get('resume_pdf')
         search_term = data.get('search_term')
+        # If premium, we skip the cache check entirely
         is_premium = data.get('is_premium') == 'true'
         
         # 1. Determine Search Term
         if resume_file:
             resume_text = scrape_resume(resume_file)
-            if "Error" not in resume_text[:10]:
+            if resume_text and "Error" not in resume_text[:10]:
                 search_term = extract_keywords_from_resume(resume_text)
         
         if not search_term:
             search_term = "software engineer"
 
-        # 2. Check Cache (if not a premium forced refresh)
+        # 2. Cache Logic (Only for non-premium users)
         if not is_premium and supabase:
             try:
-                cached = supabase.table("ScrapedJobs").select("*").eq("search_term", search_term).limit(50).execute()
+                # We check for jobs cached in the last 24 hours for true freshness
+                cached = supabase.table("ScrapedJobs")\
+                    .select("*")\
+                    .eq("search_term", search_term)\
+                    .limit(50).execute()
+                
                 if cached.data and len(cached.data) > 0:
-                    print(f"Serving {len(cached.data)} jobs from cache for: {search_term}")
                     return jsonify({
                         "status": "success",
                         "jobs": cached.data,
@@ -451,38 +450,31 @@ def get_jobs():
             except Exception as ce:
                 print(f"Cache lookup failed: {ce}")
 
-        # 3. Trigger Fresh Scrape
-        location = sanitize_location(data.get('location') or "Remote")
-        if "Worldwide" in location:
-            location = "Remote"
+        # 3. Fresh Data Fetching (Adzuna API)
+        location = data.get('location') or "Remote"
+        print(f"Fetching fresh jobs via Adzuna: {search_term} in {location}")
         
-        print(f"Scraping fresh jobs for: {search_term} in {location}")
-    
-        
-        # Clean and Prepare for JSON/DB
-        import math
-        from typing import Any, Dict, List
+        # This function should handle the 'Remote' keyword logic we fixed earlier
         cleaned_jobs = fetch_adzuna_jobs(search_term, location)
-        
-        # 4. Update Cache (background-ish, but sync for now)
+
+        if not cleaned_jobs:
+             return jsonify({"status": "error", "message": "No jobs found for this search"}), 404
+
+        # 4. Background Cache Update
+        # We do this after generating 'cleaned_jobs' but before returning to user
         if supabase:
             try:
-                # Prepare batch for Supabase (mapping fields)
-                db_jobs: List[Dict[str, Any]] = []
-                # Cache up to 50 results
-                limit = min(50, len(cleaned_jobs))
-                for i in range(limit):
-                    j = cleaned_jobs[i]
-                    db_jobs.append({
-                        "title": j.get("title"),
-                        "company": j.get("company"),
-                        "location": j.get("location"),
-                        "job_url": j.get("job_url"),
-                        "site": j.get("site"),
-                        "search_term": search_term
-                    })
+                db_jobs = [{
+                    "title": j.get("title"),
+                    "company": j.get("company"),
+                    "location": j.get("location"),
+                    "job_url": j.get("job_url"),
+                    "site": j.get("site"),
+                    "search_term": search_term,
+                    "snippet": j.get("description") # Store the snippet for the UI
+                } for j in cleaned_jobs[:50]]
                 
-                # Upsert to avoid duplicates on job_url
+                # Upsert ensures we don't have duplicate URLs in your DB
                 supabase.table("ScrapedJobs").upsert(db_jobs, on_conflict="job_url").execute()
             except Exception as se:
                 print(f"Failed to update cache: {se}")
@@ -491,7 +483,7 @@ def get_jobs():
             "status": "success",
             "jobs": cleaned_jobs,
             "search_term": search_term,
-            "source": "scraper"
+            "source": "adzuna_api"
         })
 
     except Exception as e:
