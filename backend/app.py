@@ -431,25 +431,6 @@ def get_jobs():
         if not search_term:
             search_term = "software engineer"
 
-        # 2. Cache Logic (Only for non-premium users)
-        if not is_premium and supabase:
-            try:
-                # We check for jobs cached in the last 24 hours for true freshness
-                cached = supabase.table("ScrapedJobs")\
-                    .select("*")\
-                    .eq("search_term", search_term)\
-                    .limit(50).execute()
-                
-                if cached.data and len(cached.data) > 0:
-                    return jsonify({
-                        "status": "success",
-                        "jobs": cached.data,
-                        "search_term": search_term,
-                        "source": "cache"
-                    })
-            except Exception as ce:
-                print(f"Cache lookup failed: {ce}")
-
         # 3. Fresh Data Fetching (Adzuna API)
         location = data.get('location') or "Remote"
         print(f"Fetching fresh jobs via Adzuna: {search_term} in {location}")
