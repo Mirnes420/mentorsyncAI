@@ -1,34 +1,39 @@
 import os
-from google.genai import Client as GeminiClient
+import re
+import math
+import json
+import base64
+import requests
+from typing import Any, Dict, List
+from concurrent.futures import ThreadPoolExecutor
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from scrape import scrape_job_description, scrape_resume
-from flask_cors import CORS
 from colorama import Fore
-import re
-from jobspy import scrape_jobs
-import os
+from google.genai import Client as GeminiClient
 from supabase import create_client, Client as SupabaseClient
-from dotenv import load_dotenv
 
-import base64
+from scrape import scrape_job_description, scrape_resume
 from pdf_generator import generate_styled_cv
-import requests
-from concurrent.futures import ThreadPoolExecutor
-import json
-# 1. ENVIRONMENT & CONFIGURATION
-# Load environment variables (API keys, etc.) from .env file for security
-if not os.environ.get("DOCKER_CONTAINER"):
-    load_dotenv()
 
+# 1. APP CONFIGURATION
+load_dotenv()
 app = Flask(__name__)
 
 # Initialize Clients
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-# Initialize Google Gemini Client using the modern generative AI SDK
-api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+supabase: SupabaseClient = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"Supabase init error: {e}")
+
+gemini_client = GeminiClient(api_key=GOOGLE_API_KEY)
 
 # 2. SECURITY & CROSS-ORIGIN RESOURCE SHARING
 # Restricting CORS to local development port to prevent unauthorized external access
@@ -62,10 +67,8 @@ def handle_404_error(e):
 def handle_500_error(e):
     return jsonify({"status": "error", "message": "Internal server error. Check logs."}), 500
 
-
-client = GeminiClient(api_key=api_key)
-
-# 4. JOBSPY CONFIGURATION
+# Legacy/Future JobSpy Logic (Preserved per user request)
+from jobspy import scrape_jobs
 VALID_JOBSPY_COUNTRIES = [
     'argentina', 'australia', 'austria', 'bahrain', 'bangladesh', 'belgium', 'bulgaria', 'brazil', 
     'canada', 'chile', 'china', 'colombia', 'costa rica', 'croatia', 'cyprus', 'czech republic', 
@@ -80,25 +83,12 @@ VALID_JOBSPY_COUNTRIES = [
 ]
 
 def sanitize_location(location_str):
-    """
-    JobSpy crashes if the country in the location string is not supported.
-    This helper checks the location and defaults to a safe country/worldwide if invalid.
-    """
-    if not location_str:
-        return "Worldwide"
-    
+    if not location_str: return "Worldwide"
     loc_lower = location_str.lower()
-    
-    # Check if the string directly matches or ends with a valid country
     for country in VALID_JOBSPY_COUNTRIES:
         if loc_lower == country or loc_lower.endswith(f", {country}") or loc_lower.endswith(f" {country}"):
             return location_str
-            
-    # If it's a specific blocked country (like North Macedonia), return a stripped version or just Worldwide
-    if "north macedonia" in loc_lower:
-        print(f"{Fore.YELLOW}Sanitizing unsupported country: {location_str} -> Remote{Fore.RESET}")
-        return "Remote"
-        
+    if "north macedonia" in loc_lower: return "Remote"
     return location_str
 
 def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
@@ -392,43 +382,52 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
     
     url = f"https://api.adzuna.com/v1/api/jobs/us/search/1"
     
-    params = {
-        "app_id": app_id,
-        "app_key": app_key,
-        "results_per_page": 50,
-        "what": f"{search_term} remote",
-        "where": "",
-        "content-type": "application/json"
-    }
+    def run_search(query):
+        params = {
+            "app_id": app_id,
+            "app_key": app_key,
+            "results_per_page": 50,
+            "what": query,
+            "where": "",
+            "content-type": "application/json"
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code == 200:
+                results = resp.json().get('results', [])
+                print(f"Adzuna: Found {len(results)} jobs for '{query}'")
+                return results
+        except Exception as e:
+            print(f"Adzuna Search Error ({query}): {e}")
+        return []
 
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            jobs = []
-            for j in data.get('results', []):
-                # Try to extract a better source from the redirect URL if possible
-                redirect_url = j.get('redirect_url', '').lower()
-                site_source = "adzuna"
-                if "linkedin.com" in redirect_url: site_source = "linkedin"
-                elif "indeed.com" in redirect_url: site_source = "indeed"
-                elif "glassdoor.com" in redirect_url: site_source = "glassdoor"
-                elif "ziprecruiter.com" in redirect_url: site_source = "ziprecruiter"
-                elif "dice.com" in redirect_url: site_source = "dice"
-                
-                jobs.append({
-                    "title": j.get("title"),
-                    "company": j.get("company", {}).get("display_name"),
-                    "location": j.get("location", {}).get("display_name"),
-                    "job_url": j.get("redirect_url"),
-                    "site": site_source,
-                    "description": j.get("description")
-                })
-            return jobs
-        return []
-    except Exception as e:
-        print(f"Adzuna Error: {e}")
-        return []
+    # 1. Try specific remote search
+    raw_results = run_search(f"{search_term} remote")
+
+    # 2. Fallback: Broader search if 0 found
+    if not raw_results:
+        print(f"Adzuna: 0 results for '{search_term} remote'. Trying broader fallback...")
+        raw_results = run_search(search_term)
+
+    jobs = []
+    for j in raw_results:
+        redirect_url = j.get('redirect_url', '').lower()
+        site_source = "adzuna"
+        if "linkedin.com" in redirect_url: site_source = "linkedin"
+        elif "indeed.com" in redirect_url: site_source = "indeed"
+        elif "glassdoor.com" in redirect_url: site_source = "glassdoor"
+        elif "ziprecruiter.com" in redirect_url: site_source = "ziprecruiter"
+        elif "dice.com" in redirect_url: site_source = "dice"
+        
+        jobs.append({
+            "title": j.get("title"),
+            "company": j.get("company", {}).get("display_name"),
+            "location": j.get("location", {}).get("display_name"),
+            "job_url": j.get("redirect_url"),
+            "site": site_source,
+            "description": j.get("description")
+        })
+    return jobs
 
 @app.route('/api/jobs', methods=['POST'])
 def get_jobs():

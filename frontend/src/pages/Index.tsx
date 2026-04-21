@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
@@ -40,6 +40,8 @@ const Index = () => {
   const [step, setStep] = useState<Step>(() => (localStorage.getItem('ms_step') as Step) || 'JOBS');
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('ms_activeTab') || 'search');
   const [session, setSession] = useState<Session | null>(null);
+  const hasAttemptedInitialFetch = useState(false)[0]; // We can use a simple state or ref
+  const fetchRef = React.useRef(false);
 
   // --- CV & File State ---
   const [file, setFile] = useState<File | null>(null);
@@ -122,7 +124,8 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (session && jobs.length === 0 && !isFetchingJobs) {
+    if (session && jobs.length === 0 && !isFetchingJobs && !fetchRef.current) {
+      fetchRef.current = true;
       handleFindJobs(false);
     }
   }, [session, jobs.length, isFetchingJobs]);
