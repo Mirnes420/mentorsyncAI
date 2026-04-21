@@ -345,6 +345,45 @@ def extract_keywords_from_resume(text):
     print(f"Extracted search term: {search_term}")
     return search_term
 
+
+
+def fetch_adzuna_jobs(search_term, location="Remote"):
+    # Get these from Adzuna Developer Dashboard
+    app_id = os.environ.get("ADZUNA_APP_ID")
+    app_key = os.environ.get("ADZUNA_APP_KEY")
+    
+    # Adzuna uses country codes (us, gb, etc.)
+    url = f"https://api.adzuna.com/v1/api/jobs/us/search/1"
+    
+    params = {
+        "app_id": app_id,
+        "app_key": app_key,
+        "results_per_page": 50,
+        "what": search_term,
+        "where": location,
+        "content-type": "application/json"
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            jobs = []
+            for j in data.get('results', []):
+                jobs.append({
+                    "title": j.get("title"),
+                    "company": j.get("company", {}).get("display_name"),
+                    "location": j.get("location", {}).get("display_name"),
+                    "job_url": j.get("redirect_url"),
+                    "site": "adzuna",
+                    "description": j.get("description") # Often includes a snippet!
+                })
+            return jobs
+        return []
+    except Exception as e:
+        print(f"Adzuna Error: {e}")
+        return []
+
 @app.route('/api/jobs', methods=['POST'])
 def get_jobs():
     """
@@ -389,30 +428,13 @@ def get_jobs():
             location = "Remote"
         
         print(f"Scraping fresh jobs for: {search_term} in {location}")
-        jobs_df = scrape_jobs(
-            site_name=["indeed", "linkedin", "glassdoor"],
-            search_term=search_term,
-            location=location,
-            results_wanted=100,
-            country_indeed='USA',
-            hours_old=24  # Getting freshest jobs as requested
-        )
-        
-        jobs_list = jobs_df.to_dict('records')
+    
         
         # Clean and Prepare for JSON/DB
         import math
         from typing import Any, Dict, List
-        cleaned_jobs: List[Dict[str, Any]] = []
-        for job in jobs_list:
-            # Clean NaN values and ensure search_term is included
-            clean_job: Dict[str, Any] = {
-                k: (None if isinstance(v, float) and math.isnan(v) else v)
-                for k, v in job.items()
-            }
-            clean_job['search_term'] = search_term
-            cleaned_jobs.append(clean_job)
-
+        cleaned_jobs = fetch_adzuna_jobs(search_term, location)
+        
         # 4. Update Cache (background-ish, but sync for now)
         if supabase:
             try:
