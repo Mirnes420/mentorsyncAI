@@ -477,7 +477,7 @@ def get_jobs():
         print(f"CRITICAL ERROR in get_jobs: {str(e)}")
         # Return 200 with an error status so the Frontend doesn't crash on a 404/500
         return jsonify({"status": "error", "message": "Server encountered an issue fetching jobs"}), 200
-        
+
 @app.route('/api/analyze-gap', methods=['POST'])
 def analyze_gap():
     print(f"{Fore.YELLOW}STEP 1: Request received{Fore.RESET}")
