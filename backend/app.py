@@ -416,11 +416,10 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
 @app.route('/api/jobs', methods=['POST'])
 def get_jobs():
     try:
+        # Use .get() to avoid KeyErrors
         data = request.form
         resume_file = request.files.get('resume_pdf')
         search_term = data.get('search_term')
-        # If premium, we skip the cache check entirely
-        is_premium = data.get('is_premium') == 'true'
         
         # 1. Determine Search Term
         if resume_file:
@@ -428,22 +427,28 @@ def get_jobs():
             if resume_text and "Error" not in resume_text[:10]:
                 search_term = extract_keywords_from_resume(resume_text)
         
-        if not search_term:
+        # Default fallback
+        if not search_term or search_term.lower() == "undefined":
             search_term = "software engineer"
 
-        # 3. Fresh Data Fetching (Adzuna API)
+        # 2. Skip Cache Lookup (Ensures 'freshest always')
+        # We go straight to the source
         location = data.get('location') or "Remote"
-        print(f"Fetching fresh jobs via Adzuna: {search_term} in {location}")
+        print(f"DEBUG: Fetching fresh jobs for: {search_term} in {location}")
         
-        # This function should handle the 'Remote' keyword logic we fixed earlier
         cleaned_jobs = fetch_adzuna_jobs(search_term, location)
 
+        # 3. Handle No Results gracefully (Prevents the 404 in Frontend)
         if not cleaned_jobs:
-             return jsonify({"status": "error", "message": "No jobs found for this search"}), 404
+            print(f"DEBUG: No jobs found for {search_term}")
+            return jsonify({
+                "status": "success",
+                "jobs": [],
+                "message": "No fresh jobs found at this moment.",
+                "search_term": search_term
+            })
 
-        print(f"Found {len(cleaned_jobs)} jobs for {search_term} in {location}")
-        # 4. Background Cache Update
-        # We do this after generating 'cleaned_jobs' but before returning to user
+        # 4. Background Cache Update (Leverage)
         if supabase:
             try:
                 db_jobs = [{
@@ -453,13 +458,13 @@ def get_jobs():
                     "job_url": j.get("job_url"),
                     "site": j.get("site"),
                     "search_term": search_term,
-                    "snippet": j.get("description") # Store the snippet for the UI
+                    "snippet": j.get("description")
                 } for j in cleaned_jobs[:50]]
                 
-                # Upsert ensures we don't have duplicate URLs in your DB
+                # Upsert updates the existing ones and adds new ones
                 supabase.table("ScrapedJobs").upsert(db_jobs, on_conflict="job_url").execute()
             except Exception as se:
-                print(f"Failed to update cache: {se}")
+                print(f"Background Cache Update Error: {se}")
         
         return jsonify({
             "status": "success",
@@ -469,9 +474,10 @@ def get_jobs():
         })
 
     except Exception as e:
-        print(f"Error fetching jobs: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+        print(f"CRITICAL ERROR in get_jobs: {str(e)}")
+        # Return 200 with an error status so the Frontend doesn't crash on a 404/500
+        return jsonify({"status": "error", "message": "Server encountered an issue fetching jobs"}), 200
+        
 @app.route('/api/analyze-gap', methods=['POST'])
 def analyze_gap():
     print(f"{Fore.YELLOW}STEP 1: Request received{Fore.RESET}")
