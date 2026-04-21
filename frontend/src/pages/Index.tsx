@@ -204,7 +204,7 @@ const Index = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_url: job.job_url }),
       });
-      
+
       const fetchResult = await fetchResp.json();
       const fullText = fetchResult.full_text || job.description;
 
@@ -246,7 +246,7 @@ const Index = () => {
 
   const handleManualJobSubmit = () => {
     if (!manualJobText || !selectedJob || !file) return;
-    
+
     const runAnalysisWithText = async () => {
       setIsAnalyzingGap(true);
       try {
@@ -282,12 +282,12 @@ const Index = () => {
   const handleTailorWithAnswers = async (userAnswers: Record<string, string>, jobOverride?: Job, textOverride?: string) => {
     const targetJob = jobOverride || selectedJob;
     const targetText = textOverride || manualJobText;
-    
+
     if (!file || !targetJob) {
       console.error("Missing file or job for tailoring", { file: !!file, job: !!targetJob });
       return;
     }
-    
+
     setIsTailoring(true);
 
     try {
@@ -562,9 +562,9 @@ const Index = () => {
 
                       {file && (
                         <DialogFooter className="p-6 border-t bg-muted/30 sm:flex-col">
-                          <Button 
-                            onClick={() => { handleFindJobs(true); setIsPremiumModalOpen(false); }} 
-                            disabled={isFetchingJobs} 
+                          <Button
+                            onClick={() => { handleFindJobs(true); setIsPremiumModalOpen(false); }}
+                            disabled={isFetchingJobs}
                             className="w-full h-12 font-bold gap-2 text-base shadow-lg shadow-primary/20"
                           >
                             {isFetchingJobs ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
@@ -676,9 +676,9 @@ const Index = () => {
                     Indeed blocked our automated scan. Please paste the job text below for an instant analysis.
                   </p>
                 </div>
-                
+
                 <div className="space-y-4">
-                  <Textarea 
+                  <Textarea
                     placeholder="Paste the job description here..."
                     className="min-h-[300px] text-base p-4 resize-none focus-visible:ring-primary"
                     value={manualJobText}
@@ -686,8 +686,8 @@ const Index = () => {
                   />
                   <div className="flex gap-3">
                     <Button variant="outline" onClick={() => setStep('JOBS')} className="flex-1 h-12">Cancel</Button>
-                    <Button 
-                      disabled={!manualJobText.trim()} 
+                    <Button
+                      disabled={!manualJobText.trim()}
                       onClick={handleManualJobSubmit}
                       className="flex-[2] h-12 font-bold text-lg shadow-lg shadow-primary/20"
                     >
