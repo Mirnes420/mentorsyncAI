@@ -351,38 +351,40 @@ def analyze_specific_job():
     
 def extract_keywords_from_resume(text):
     """
-    Very basic keyword/title extraction based on common skills.
-    In a real app, you might use spaCy or a stronger NLP matcher.
+    Extracts top 3 distinct skills to create a clean, effective search term.
     """
-    # Just an example list of common skills to look for
     common_skills = [
         "python", "java", "javascript", "react", "node.js", "flask", "django", 
         "sql", "aws", "docker", "kubernetes", "typescript", "html", "css", 
         "machine learning", "data science", "project manager", "software engineer",
-        "frontend", "backend", "full stack"
+        "frontend", "backend", "full stack", "devops", "cloud"
     ]
     
     text_lower = text.lower()
-    from typing import List
-    found_skills: List[str] = []
+    found_skills = []
+    # Use re to find word boundaries so 'java' doesn't match 'javascript'
+    import re
     for skill in common_skills:
-        if skill in text_lower:
+        pattern = rf"\b{re.escape(skill)}\b"
+        if re.search(pattern, text_lower):
             found_skills.append(skill)
+            if len(found_skills) >= 3: break
             
-    # Default search term if we couldn't find anything
-    top_skills = [found_skills[i] for i in range(min(3, len(found_skills)))]
-    search_term = " ".join(top_skills) if top_skills else "software engineer"
-    print(f"Extracted search term: {search_term}")
+    search_term = " ".join(found_skills) if found_skills else "software engineer"
     return search_term
 
 def fetch_adzuna_jobs(search_term, location="Remote"):
-    # Get these from Adzuna Developer Dashboard
     app_id = os.environ.get("ADZUNA_APP_ID")
     app_key = os.environ.get("ADZUNA_APP_KEY")
+    
+    # 1. Clean the search term (remove commas, newlines, extra spaces)
+    search_term = re.sub(r'[,\n\r\t]', ' ', search_term)
+    search_term = re.sub(r'\s+', ' ', search_term).strip()
     
     url = f"https://api.adzuna.com/v1/api/jobs/us/search/1"
     
     def run_search(query):
+        # Match test_adzuna.py parameters EXACTLY
         params = {
             "app_id": app_id,
             "app_key": app_key,
@@ -392,21 +394,23 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
             "content-type": "application/json"
         }
         try:
+            print(f"Adzuna: Requesting '{query}'...")
             resp = requests.get(url, params=params, timeout=10)
             if resp.status_code == 200:
                 results = resp.json().get('results', [])
-                print(f"Adzuna: Found {len(results)} jobs for '{query}'")
+                print(f"Adzuna: Success. Found {len(results)} jobs.")
                 return results
+            else:
+                print(f"{Fore.RED}Adzuna Error: {resp.status_code} - {resp.text[:200]}{Fore.RESET}")
         except Exception as e:
-            print(f"Adzuna Search Error ({query}): {e}")
+            print(f"Adzuna Exception: {e}")
         return []
 
-    # 1. Try specific remote search
+    # Try specific remote search first
     raw_results = run_search(f"{search_term} remote")
 
-    # 2. Fallback: Broader search if 0 found
+    # Fallback to broader if 0 found
     if not raw_results:
-        print(f"Adzuna: 0 results for '{search_term} remote'. Trying broader fallback...")
         raw_results = run_search(search_term)
 
     jobs = []
