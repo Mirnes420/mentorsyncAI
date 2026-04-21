@@ -441,6 +441,7 @@ def get_jobs():
         if not cleaned_jobs:
              return jsonify({"status": "error", "message": "No jobs found for this search"}), 404
 
+        print(f"Found {len(cleaned_jobs)} jobs for {search_term} in {location}")
         # 4. Background Cache Update
         # We do this after generating 'cleaned_jobs' but before returning to user
         if supabase:
