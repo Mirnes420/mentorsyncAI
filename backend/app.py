@@ -1,39 +1,34 @@
 import os
-import re
-import math
-import json
-import base64
-import requests
-from typing import Any, Dict, List
-from concurrent.futures import ThreadPoolExecutor
-
+from google.genai import Client as GeminiClient
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from colorama import Fore
-from google.genai import Client as GeminiClient
-from supabase import create_client, Client as SupabaseClient
-
 from scrape import scrape_job_description, scrape_resume
-from pdf_generator import generate_styled_cv
+from flask_cors import CORS
+from colorama import Fore
+import re
+from jobspy import scrape_jobs
+import os
+from supabase import create_client, Client as SupabaseClient
+from dotenv import load_dotenv
 
-# 1. APP CONFIGURATION
-load_dotenv()
+import base64
+from pdf_generator import generate_styled_cv
+import requests
+from concurrent.futures import ThreadPoolExecutor
+import json
+# 1. ENVIRONMENT & CONFIGURATION
+# Load environment variables (API keys, etc.) from .env file for security
+if not os.environ.get("DOCKER_CONTAINER"):
+    load_dotenv()
+
 app = Flask(__name__)
 
 # Initialize Clients
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-
-supabase: SupabaseClient = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception as e:
-        print(f"{Fore.RED}Failed to init Supabase: {e}{Fore.RESET}")
-
-gemini_client = GeminiClient(api_key=GOOGLE_API_KEY)
+# Initialize Google Gemini Client using the modern generative AI SDK
+api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 # 2. SECURITY & CROSS-ORIGIN RESOURCE SHARING
 # Restricting CORS to local development port to prevent unauthorized external access
@@ -62,6 +57,49 @@ def handle_400_error(e):
 @app.errorhandler(404)
 def handle_404_error(e):
     return jsonify({"status": "error", "message": "Resource not found"}), 404
+
+@app.errorhandler(500)
+def handle_500_error(e):
+    return jsonify({"status": "error", "message": "Internal server error. Check logs."}), 500
+
+
+client = GeminiClient(api_key=api_key)
+
+# 4. JOBSPY CONFIGURATION
+VALID_JOBSPY_COUNTRIES = [
+    'argentina', 'australia', 'austria', 'bahrain', 'bangladesh', 'belgium', 'bulgaria', 'brazil', 
+    'canada', 'chile', 'china', 'colombia', 'costa rica', 'croatia', 'cyprus', 'czech republic', 
+    'czechia', 'denmark', 'ecuador', 'egypt', 'estonia', 'finland', 'france', 'germany', 'greece', 
+    'hong kong', 'hungary', 'india', 'indonesia', 'ireland', 'israel', 'italy', 'japan', 'kuwait', 
+    'latvia', 'lithuania', 'luxembourg', 'malaysia', 'malta', 'mexico', 'morocco', 'netherlands', 
+    'new zealand', 'nigeria', 'norway', 'oman', 'pakistan', 'panama', 'peru', 'philippines', 
+    'poland', 'portugal', 'qatar', 'romania', 'saudi arabia', 'singapore', 'slovakia', 'slovenia', 
+    'south africa', 'south korea', 'spain', 'sweden', 'switzerland', 'taiwan', 'thailand', 
+    'türkiye', 'turkey', 'ukraine', 'united arab emirates', 'uk', 'united kingdom', 'usa', 'us', 
+    'united states', 'uruguay', 'venezuela', 'vietnam', 'usa/ca', 'worldwide'
+]
+
+def sanitize_location(location_str):
+    """
+    JobSpy crashes if the country in the location string is not supported.
+    This helper checks the location and defaults to a safe country/worldwide if invalid.
+    """
+    if not location_str:
+        return "Worldwide"
+    
+    loc_lower = location_str.lower()
+    
+    # Check if the string directly matches or ends with a valid country
+    for country in VALID_JOBSPY_COUNTRIES:
+        if loc_lower == country or loc_lower.endswith(f", {country}") or loc_lower.endswith(f" {country}"):
+            return location_str
+            
+    # If it's a specific blocked country (like North Macedonia), return a stripped version or just Worldwide
+    if "north macedonia" in loc_lower:
+        print(f"{Fore.YELLOW}Sanitizing unsupported country: {location_str} -> Remote{Fore.RESET}")
+        return "Remote"
+        
+    return location_str
 
 def generate_with_fallback(contents, primary_model='gemini-2.5-flash'):
 
