@@ -1,9 +1,9 @@
 import os
-from dotenv import load_dotenv
 import requests
+from dotenv import load_dotenv
+from flask import jsonify
 
 load_dotenv()
-
 
 def fetch_adzuna_jobs(search_term, location="Remote"):
     # Get these from Adzuna Developer Dashboard
@@ -44,5 +44,45 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
         return []
 
 
+def get_jobs():
+    try:
+        # Use .get() to avoid KeyErrors
+        search_term = "software engineer"
+        
 
-print(fetch_adzuna_jobs("software engineer", "Remote"))
+        # Default fallback
+        if not search_term or search_term.lower() == "undefined":
+            search_term = "software engineer"
+
+        # 2. Skip Cache Lookup (Ensures 'freshest always')
+        # We go straight to the source
+        location = "Remote"
+        print(f"DEBUG: Fetching fresh jobs for: {search_term} in {location}")
+        
+        cleaned_jobs = fetch_adzuna_jobs(search_term)
+
+        # 3. Handle No Results gracefully (Prevents the 404 in Frontend)
+        if not cleaned_jobs:
+            print(f"DEBUG: No jobs found for {search_term}")
+            return jsonify({
+                "status": "success",
+                "jobs": [],
+                "message": "No fresh jobs found at this moment.",
+                "search_term": search_term
+            })
+        
+        print("clean jobs from adzuna", cleaned_jobs)
+        return jsonify({
+            "status": "success",
+            "jobs": cleaned_jobs,
+            "search_term": search_term,
+            "source": "adzuna_api"
+        })
+
+    except Exception as e:
+        print(f"CRITICAL ERROR in get_jobs: {str(e)}")
+        # Return 200 with an error status so the Frontend doesn't crash on a 404/500
+        return jsonify({"status": "error", "message": "Server encountered an issue fetching jobs"}), 200
+
+
+get_jobs()
