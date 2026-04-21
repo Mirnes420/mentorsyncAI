@@ -359,8 +359,8 @@ def fetch_adzuna_jobs(search_term, location="Remote"):
         "app_id": app_id,
         "app_key": app_key,
         "results_per_page": 50,
-        "what": search_term,
-        "where": location,
+        "what": f"{search_term} remote",  # Add 'remote' to the keywords
+        "where": "",                     # Leave location empty for global US remote
         "content-type": "application/json"
     }
 
