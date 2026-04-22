@@ -298,24 +298,38 @@ def analyze_specific_job():
     data = request.json
     job_url = data.get('job_url')
     
-    # 1. Check if we already have this job's FULL description in Supabase
-    existing = supabase.table("JobDetails").select("full_text").eq("url", job_url).maybe_single().execute()
-    
-    if existing.data:
-        return jsonify({"full_text": existing.data['full_text'], "source": "cache"})
+    if not job_url:
+        return jsonify({"error": "No URL provided"}), 400
 
-    # 2. If not in cache, do the heavy scrape (Jina)
+    # 1. Safer Supabase Check
+    try:
+        # Use simple select().eq() instead of maybe_single() to avoid the 204 error
+        query = supabase.table("JobDetails").select("full_text").eq("url", job_url).execute()
+        
+        if query.data and len(query.data) > 0:
+            print(f"DEBUG: Cache hit for {job_url}")
+            return jsonify({"full_text": query.data[0]['full_text'], "source": "cache"})
+            
+    except Exception as e:
+        # If the table doesn't exist yet or RLS fails, we just log and move to scraping
+        print(f"Supabase Lookup Error: {e}")
+
+    # 2. If not in cache or error occurred, do the scrape
+    print(f"DEBUG: Scraping fresh data for {job_url}")
     full_text = scrape_job_description(job_url) 
     
-    # 3. Save to Supabase so the next user gets it instantly
-    if "Error" not in full_text[:10]:
+    # 3. Save to Supabase
+    if full_text and "Error" not in full_text[:10]:
         try:
-            supabase.table("JobDetails").insert({"url": job_url, "full_text": full_text}).execute()
+            supabase.table("JobDetails").upsert({
+                "url": job_url, 
+                "full_text": full_text
+            }).execute()
         except Exception as e:
             print(f"Failed to cache to JobDetails: {e}")
     
     return jsonify({"full_text": full_text, "source": "fresh_scrape"})
-  
+    
 def extract_keywords_from_resume(text):
     """
     Very basic keyword/title extraction based on common skills.
@@ -426,6 +440,7 @@ def get_jobs():
         data = request.get_json(silent=True) or request.form
         search_term = data.get('search_term')
         resume_file = request.files.get('resume_pdf')
+        location = data.get('location') or "Remote"
         
         # 1. Determine Search Term
         if resume_file:
@@ -437,15 +452,65 @@ def get_jobs():
         if not search_term or search_term.lower() == "undefined":
             search_term = "software engineer"
 
-        # 2. Skip Cache Lookup (Ensures 'freshest always')
-        # We go straight to the source
-        location = data.get('location') or "Remote"
+        # 2. Cache Lookup (Optimization)
+        try:
+            # Check for jobs with the same search term in ScrapedJobs
+            # We filter by search_term and potentially site='adzuna'
+            query = supabase.table("ScrapedJobs").select("*")\
+                .ilike("search_term", f"%{search_term}%")\
+                .order("created_at", desc=True)\
+                .limit(50)\
+                .execute()
+            
+            if query.data and len(query.data) > 5:
+                print(f"DEBUG: Cache hit for {search_term} ({len(query.data)} jobs found)")
+                # Format to match the expected structure
+                cached_jobs = []
+                for j in query.data:
+                    cached_jobs.append({
+                        "title": j.get("title"),
+                        "company": j.get("company"),
+                        "location": j.get("location"),
+                        "job_url": j.get("job_url"),
+                        "site": j.get("site") or "adzuna",
+                        "description": j.get("description")
+                    })
+                return jsonify({
+                    "status": "success",
+                    "jobs": cached_jobs,
+                    "search_term": search_term,
+                    "source": "cache"
+                })
+        except Exception as e:
+            print(f"Supabase Cache Lookup Error: {e}")
+
+        # 3. Fetch from API if cache miss
         country_code = get_country_code(location)
         print(f"DEBUG: Fetching fresh jobs for: {search_term} in {location} (Country: {country_code})")
         
         cleaned_jobs = fetch_adzuna_jobs(search_term, country_code=country_code)
 
-        # 3. Handle No Results gracefully (Prevents the 404 in Frontend)
+        # 4. Populate Cache (Upsert into ScrapedJobs)
+        if cleaned_jobs:
+            try:
+                upsert_data = []
+                for job in cleaned_jobs:
+                    upsert_data.append({
+                        "job_url": job["job_url"], # Unique constraint
+                        "title": job["title"],
+                        "company": job["company"],
+                        "location": job["location"],
+                        "description": job["description"],
+                        "site": job["site"],
+                        "search_term": search_term
+                    })
+                
+                # Perform upsert in batches or just one go
+                supabase.table("ScrapedJobs").upsert(upsert_data, on_conflict="job_url").execute()
+            except Exception as e:
+                print(f"Failed to populate ScrapedJobs cache: {e}")
+
+        # 5. Handle No Results gracefully
         if not cleaned_jobs:
             print(f"DEBUG: No jobs found for {search_term}")
             return jsonify({
@@ -455,7 +520,6 @@ def get_jobs():
                 "search_term": search_term
             })
         
-        print("clean jobs from adzuna", cleaned_jobs)
         return jsonify({
             "status": "success",
             "jobs": cleaned_jobs,
@@ -465,7 +529,7 @@ def get_jobs():
 
     except Exception as e:
         print(f"CRITICAL ERROR in get_jobs: {str(e)}")
-        # Return 200 with an error status so the Frontend doesn't crash on a 404/500
+        # Return 200 with an error status so the Frontend doesn't crash
         return jsonify({"status": "error", "message": "Server encountered an issue fetching jobs"}), 200
 
 @app.route('/api/analyze-gap', methods=['POST'])

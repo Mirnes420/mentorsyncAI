@@ -30,6 +30,58 @@ def scrape_resume(resume_file):
         return f"Error parsing PDF: {str(e)}"
 
 # 2. SCRAPING FUNCTIONALITY FOR JOB DESCRIPTION EXTRACTION FROM A WEBSITE
+def scrape_with_selenium(url):
+    """
+    Robust fallback using SeleniumBase to bypass bot detection.
+    """
+    print(f"{Fore.YELLOW}Attempting robust scrape with SeleniumBase...{Fore.RESET}")
+    driver = None
+    try:
+        # Use a headless driver
+        driver = Driver(browser="chrome", headless=True, uc=True) # uc=True for undetected-chromedriver
+        driver.get(url)
+        
+        # Wait a bit for JS to render
+        time.sleep(3)
+        
+        # Try to follow redirects if necessary
+        # Adzuna redirects often land on the final job page
+        
+        page_source = driver.page_source
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(page_source, "html.parser")
+        
+        # Remove noise
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        
+        # Try to find common job containers
+        content = ""
+        for selector in ["div.description", ".job-description", "#jobDescriptionText", "article", "main", ".job_description", "[class*='description']"]:
+            found = soup.select_one(selector)
+            if found:
+                content = found.get_text(separator="\n", strip=True)
+                break
+        
+        if not content:
+            content = soup.get_text(separator="\n", strip=True)
+            
+        if len(content) > 150:
+            print(f"{Fore.GREEN}Successfully scraped via SeleniumBase{Fore.RESET}")
+            return content
+            
+        return "Error: Selenium scrape returned too little content"
+        
+    except Exception as e:
+        print(f"{Fore.RED}Selenium scrape failed: {str(e)}{Fore.RESET}")
+        return f"Error: Selenium scrape failed ({str(e)})"
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+
 def scrape_job_description(url):
     print(f"{Fore.CYAN}Scraping via Jina: {url}{Fore.RESET}")
     
@@ -64,16 +116,21 @@ def scrape_job_description(url):
 
             # Final Polish
             final_text = job_text.strip()
-            if len(final_text) > 150:
+            
+            # 2. BETTER ERROR CHECKING
+            # Sometimes Jina returns a "Too Many Requests" or "Blocked" message that is > 150 chars
+            if any(err in final_text for err in ["Too Many Requests", "429", "Blocked", "access denied", "robot check"]):
+                print(f"{Fore.YELLOW}Jina returned an error/block message. Trying fallbacks...{Fore.RESET}")
+            elif len(final_text) > 150:
                 print(f"{Fore.GREEN}Successfully scraped via Jina{Fore.RESET}")
                 return final_text
     
     except Exception as e:
         print(f"{Fore.YELLOW}Jina failed: {str(e)}. Trying direct fetch...{Fore.RESET}")
 
-    # --- FALLBACK: Direct Fetch with Browser Headers ---
+    # --- FALLBACK 1: Direct Fetch with Browser Headers ---
     try:
-        print(f"{Fore.YELLOW}Fallback: Direct fetch for {url}{Fore.RESET}")
+        print(f"{Fore.YELLOW}Fallback 1: Direct fetch for {url}{Fore.RESET}")
         fallback_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -102,7 +159,8 @@ def scrape_job_description(url):
             if len(content) > 150:
                 print(f"{Fore.GREEN}Successfully scraped via Direct Fetch{Fore.RESET}")
                 return content
-                
-        return f"Error: Scraping failed with status {res.status_code}"
     except Exception as e:
-        return f"Error: All scraping attempts failed ({str(e)})"
+        print(f"{Fore.YELLOW}Direct fetch failed: {str(e)}. Trying Selenium fallback...{Fore.RESET}")
+
+    # --- FALLBACK 2: SeleniumBase (Ultimate Fallback) ---
+    return scrape_with_selenium(url)
