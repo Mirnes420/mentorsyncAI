@@ -54,10 +54,20 @@ const Index = () => {
   const [userLocation, setUserLocation] = useState<string>('Remote');
 
   // --- Job Data State ---
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<Job[]>(() => {
+    const saved = localStorage.getItem('ms_jobs');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isFetchingJobs, setIsFetchingJobs] = useState(false);
   const [manualJobUrl, setManualJobUrl] = useState('');
+
+  // Sync jobs to localStorage
+  useEffect(() => {
+    if (jobs.length > 0) {
+      localStorage.setItem('ms_jobs', JSON.stringify(jobs));
+    }
+  }, [jobs]);
 
   // --- Analysis & Results State ---
   const [isFetchingFullJob, setIsFetchingFullJob] = useState(false);

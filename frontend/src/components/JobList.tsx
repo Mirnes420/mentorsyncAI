@@ -62,12 +62,12 @@ function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: J
         <div className="flex justify-between items-start gap-4">
           <div>
             <CardTitle className="text-xl line-clamp-1">{job.title}</CardTitle>
-            <CardDescription className="flex items-center gap-2 mt-2 text-sm">
+            <CardDescription className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 mt-2 text-sm">
               <span className="flex items-center gap-1 font-medium text-foreground">
                 <Building className="w-3.5 h-3.5" />
                 {job.company}
               </span>
-              <span className="text-muted-foreground">•</span>
+              <span className="hidden md:inline text-muted-foreground">•</span>
               <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" />
                 {job.location || 'Remote'}
@@ -136,8 +136,8 @@ function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: J
         ) : null}
       </CardContent>
 
-      <CardFooter className="flex justify-between items-center bg-muted/10 pt-4">
-        <div className="flex gap-4 items-center">
+      <CardFooter className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 bg-muted/10 pt-4 px-4 pb-4 md:pb-3">
+        <div className="flex gap-4 items-center w-full md:w-auto">
           <a
             href={job.job_url}
             target="_blank"
@@ -150,14 +150,14 @@ function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: J
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary transition-colors"
+              className="h-8 px-2 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary transition-colors ml-auto md:ml-0"
               onClick={() => onSaveJob(job)}
             >
               <BookmarkPlus className="w-3.5 h-3.5" /> Save
             </Button>
           )}
         </div>
-        <Button onClick={() => onSelectJob(job)} size="sm" className="shadow-sm">
+        <Button onClick={() => onSelectJob(job)} size="sm" className="w-full md:w-auto shadow-sm font-semibold">
           Tailor CV for this Job
         </Button>
       </CardFooter>
