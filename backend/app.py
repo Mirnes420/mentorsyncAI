@@ -306,7 +306,7 @@ def analyze_specific_job():
     # 1. Safer Supabase Check
     try:
         # Use simple select().eq() instead of maybe_single() to avoid the 204 error
-        query = supabase.table("JobDetails").select("full_text").eq("url", job_url).execute()
+        query = supabase.table("jobdetails").select("full_text").eq("url", job_url).execute()
         
         if query.data and len(query.data) > 0:
             print(f"DEBUG: Cache hit for {job_url}")
@@ -323,12 +323,12 @@ def analyze_specific_job():
     # 3. Save to Supabase
     if full_text and "Error" not in full_text[:10]:
         try:
-            supabase.table("JobDetails").upsert({
+            supabase.table("jobdetails").upsert({
                 "url": job_url, 
                 "full_text": full_text
             }).execute()
         except Exception as e:
-            print(f"Failed to cache to JobDetails: {e}")
+            print(f"Failed to cache to jobdetails: {e}")
     
     return jsonify({"full_text": full_text, "source": "fresh_scrape"})
     
