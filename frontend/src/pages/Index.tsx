@@ -531,16 +531,18 @@ const Index = () => {
 
         {step === 'JOBS' && (
           <div className="flex flex-col h-[100dvh]">
-            <div className="flex flex-col gap-6 mb-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <Button variant="ghost" onClick={goBackToUpload} className="gap-2 -ml-3">
-                  <ChevronLeft className="w-4 h-4" /> Back to Upload
+                  <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Back to Upload</span>
+                  <span className="sm:hidden">Back</span>
                 </Button>
-                <div className="flex items-center gap-2">
+                
+                <div className="flex items-center gap-2 flex-wrap justify-end flex-1">
                   <Dialog open={isPremiumModalOpen} onOpenChange={setIsPremiumModalOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm" className="gap-2 border-primary/30 text-primary">
-                        <Sparkles className="w-4 h-4" /> Premium CV Match
+                        <Sparkles className="w-4 h-4" /> <span className="hidden xs:inline">Premium CV Match</span>
+                        <span className="xs:hidden text-[10px]">Premium</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-md max-h-[95vh] flex flex-col p-0 overflow-hidden">
@@ -574,30 +576,47 @@ const Index = () => {
                       )}
                     </DialogContent>
                   </Dialog>
-                  <Button variant="ghost" size="sm" onClick={() => handleFindJobs(true)} disabled={isFetchingJobs} className="gap-2">
-                    <Search className={`w-3.5 h-3.5 ${isFetchingJobs ? 'animate-spin' : ''}`} /> Refresh
-                  </Button>
-                  <Badge variant="outline" className="bg-primary/5 text-primary">
-                    {filteredJobs.length} Jobs
-                  </Badge>
+                  
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <Button variant="ghost" size="sm" onClick={() => handleFindJobs(true)} disabled={isFetchingJobs} className="h-8 px-2">
+                      <Search className={`w-3.5 h-3.5 mr-1.5 ${isFetchingJobs ? 'animate-spin' : ''}`} /> Refresh
+                    </Button>
+                    <Badge variant="outline" className="bg-primary/5 text-primary h-8 px-2.5">
+                      {filteredJobs.length} <span className="hidden sm:inline ml-1">Jobs</span>
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 bg-muted/30 p-4 rounded-xl border">
+              {/* Mobile Filter Toggle */}
+              <div className="lg:hidden w-full">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-between gap-2" 
+                  onClick={() => setActiveTab(activeTab === 'filters' ? 'search' : 'filters')} // Reusing tab state or just a boolean is better
+                >
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4" /> {activeTab === 'filters' ? 'Hide Filters' : 'Show Filters & Search'}
+                  </div>
+                  {activeTab === 'filters' ? <X className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </Button>
+              </div>
+
+              <div className={`${activeTab === 'filters' ? 'flex' : 'hidden lg:grid'} grid-cols-1 lg:grid-cols-4 gap-4 bg-muted/30 p-4 rounded-xl border animate-in slide-in-from-top-2 duration-300`}>
                 <div className="lg:col-span-2 flex gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search..." className="pl-9" value={searchDraft} onChange={e => setSearchDraft(e.target.value)} />
+                    <Input placeholder="Search job title or company..." className="pl-9" value={searchDraft} onChange={e => setSearchDraft(e.target.value)} />
                   </div>
-                  <Button onClick={handleApplyFilters}>Search</Button>
+                  <Button onClick={() => { handleApplyFilters(); if(window.innerWidth < 1024) setActiveTab('search'); }}>Search</Button>
                 </div>
 
                 <div className="lg:col-span-2 flex gap-2">
                   <div className="relative flex-1">
                     <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Paste Job URL..." className="pl-9 bg-primary/5" value={manualJobUrl} onChange={e => setManualJobUrl(e.target.value)} />
+                    <Input placeholder="Paste Job URL directly..." className="pl-9 bg-primary/5 border-primary/20" value={manualJobUrl} onChange={e => setManualJobUrl(e.target.value)} />
                   </div>
-                  <Button variant="secondary" onClick={handleManualJobLink}>Tailor Directly</Button>
+                  <Button variant="secondary" onClick={handleManualJobLink} className="whitespace-nowrap">Tailor Directly</Button>
                 </div>
 
                 <div className="flex items-center justify-between px-3 h-10 bg-background rounded-md border">
@@ -606,7 +625,7 @@ const Index = () => {
                 </div>
 
                 <Select value={appliedJobType} onValueChange={setAppliedJobType}>
-                  <SelectTrigger><Briefcase className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
+                  <SelectTrigger><div className="flex items-center"><Briefcase className="w-4 h-4 mr-2" /><SelectValue /></div></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="full-time">Full-time</SelectItem>
@@ -615,7 +634,7 @@ const Index = () => {
                 </Select>
 
                 <Select value={appliedSeniority} onValueChange={setAppliedSeniority}>
-                  <SelectTrigger><Trophy className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
+                  <SelectTrigger><div className="flex items-center"><Trophy className="w-4 h-4 mr-2" /><SelectValue /></div></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Levels</SelectItem>
                     <SelectItem value="entry">Entry/Junior</SelectItem>
@@ -624,13 +643,18 @@ const Index = () => {
                   </SelectContent>
                 </Select>
 
-                <Input
-                  placeholder="Skills (React, Go...)"
-                  value={appliedSkills}
-                  onChange={e => setAppliedSkills(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
-                />
-                <Button variant="ghost" onClick={handleClearFilters}>Clear</Button>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Skills (React, Docker...)"
+                    className="flex-1"
+                    value={appliedSkills}
+                    onChange={e => setAppliedSkills(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+                  />
+                  <Button variant="ghost" size="icon" onClick={handleClearFilters} title="Clear Filters" className="shrink-0">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-hidden mt-6">

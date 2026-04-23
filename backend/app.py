@@ -10,6 +10,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from colorama import Fore
+import threading
+import time
 from google.genai import Client as GeminiClient
 from supabase import create_client, Client as SupabaseClient
 from scrape import scrape_job_description, scrape_resume
@@ -418,14 +420,19 @@ def fetch_adzuna_jobs(search_term, country_code="us"):
             data = response.json()
             print(f"Total jobs found: {data.get('count')}")
             jobs = []
+            import re
             for j in data.get('results', []):
+                # Clean HTML tags from Adzuna descriptions
+                raw_desc = j.get("description", "")
+                clean_desc = re.sub('<[^<]+?>', '', raw_desc)
+                
                 jobs.append({
                     "title": j.get("title"),
                     "company": j.get("company", {}).get("display_name"),
                     "location": j.get("location", {}).get("display_name"),
                     "job_url": j.get("redirect_url"),
                     "site": "adzuna",
-                    "description": j.get("description") # Often includes a snippet!
+                    "description": clean_desc # Snippet without HTML
                 })
             return jobs
         return []
@@ -454,15 +461,21 @@ def get_jobs():
 
         # 2. Cache Lookup (Optimization)
         try:
-            # Check for jobs with the same search term in ScrapedJobs
-            # We filter by search_term and potentially site='adzuna'
-            query = supabase.table("ScrapedJobs").select("*")\
-                .ilike("search_term", f"%{search_term}%")\
-                .order("created_at", desc=True)\
-                .limit(50)\
-                .execute()
+            # If no search term, just grab latest jobs
+            if not search_term or search_term == "software engineer":
+                query = supabase.table("ScrapedJobs").select("*")\
+                    .order("created_at", desc=True)\
+                    .limit(50)\
+                    .execute()
+            else:
+                # Check for jobs with the same search term in ScrapedJobs
+                query = supabase.table("ScrapedJobs").select("*")\
+                    .ilike("search_term", f"%{search_term}%")\
+                    .order("created_at", desc=True)\
+                    .limit(50)\
+                    .execute()
             
-            if query.data and len(query.data) > 5:
+            if query.data and len(query.data) > 0:
                 print(f"DEBUG: Cache hit for {search_term} ({len(query.data)} jobs found)")
                 # Format to match the expected structure
                 cached_jobs = []
@@ -475,12 +488,18 @@ def get_jobs():
                         "site": j.get("site") or "adzuna",
                         "description": j.get("description")
                     })
-                return jsonify({
-                    "status": "success",
-                    "jobs": cached_jobs,
-                    "search_term": search_term,
-                    "source": "cache"
-                })
+                
+                # If we have enough jobs, return immediately
+                # If search_term was custom, 5 is enough. If generic, we want at least 15.
+                min_jobs = 5 if search_term != "software engineer" else 15
+                
+                if len(cached_jobs) >= min_jobs:
+                    return jsonify({
+                        "status": "success",
+                        "jobs": cached_jobs,
+                        "search_term": search_term,
+                        "source": "cache"
+                    })
         except Exception as e:
             print(f"Supabase Cache Lookup Error: {e}")
 
@@ -678,6 +697,62 @@ def get_applied_jobs():
     except Exception as e:
         print(f"Error fetching applied jobs: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+# ---------------------------------------------------------
+# BACKGROUND SCRAPER LOGIC (Automatic Cache Population)
+# ---------------------------------------------------------
+
+def background_job_scraper():
+    """
+    Automatically scrapes 50 jobs for common categories every 4 hours.
+    This ensures users always have jobs ready without waiting.
+    """
+    # Wait a minute before starting to ensure the main app is healthy
+    time.sleep(60)
+    print(f"{Fore.BLUE}BACKGROUND SCRAPER: Initializing scheduled scraping cycle...{Fore.RESET}")
+    
+    # Common categories to keep the cache fresh
+    categories = ["software engineer", "frontend developer", "backend engineer", "data scientist", "product manager"]
+    
+    while True:
+        try:
+            print(f"{Fore.BLUE}BACKGROUND SCRAPER: Starting cycle at {time.ctime()}...{Fore.RESET}")
+            
+            for category in categories:
+                print(f"BACKGROUND SCRAPER: Proactively fetching {category}...")
+                new_jobs = fetch_adzuna_jobs(category, country_code="us")
+                
+                if new_jobs:
+                    corrected_data = []
+                    for job in new_jobs:
+                        corrected_data.append({
+                            "job_url": job["job_url"],
+                            "title": job["title"],
+                            "company": job["company"],
+                            "location": job["location"],
+                            "description": job["description"],
+                            "site": job.get("site", "adzuna"),
+                            "search_term": category
+                        })
+                    
+                    try:
+                        if supabase:
+                            supabase.table("ScrapedJobs").upsert(corrected_data, on_conflict="job_url").execute()
+                            print(f"BACKGROUND SCRAPER: Cached {len(corrected_data)} jobs for {category}")
+                    except Exception as e:
+                        print(f"BACKGROUND SCRAPER: Upsert error for {category}: {e}")
+                
+                time.sleep(15)
+            
+            print(f"{Fore.BLUE}BACKGROUND SCRAPER: Cycle complete. Sleeping for 4 hours.{Fore.RESET}")
+        except Exception as e:
+            print(f"{Fore.RED}BACKGROUND SCRAPER ERROR: {e}{Fore.RESET}")
+        
+        time.sleep(4 * 60 * 60)
+
+# Start background scraper thread
+scraper_thread = threading.Thread(target=background_job_scraper, daemon=True)
+scraper_thread.start()
 
 if __name__ == '__main__':
     # Use Render's PORT if it exists, otherwise use 5555 for local dev
