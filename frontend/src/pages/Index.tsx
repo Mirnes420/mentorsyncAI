@@ -599,6 +599,13 @@ const Index = () => {
                   {/* Collapsible Filter Content */}
                   <div className={`${isFiltersExpanded ? 'flex' : 'hidden lg:flex'} flex-col lg:grid lg:grid-cols-4 gap-3 bg-muted/30 p-3 rounded-lg border border-border/50 animate-in fade-in slide-in-from-top-2 duration-200`}>
                     <div className="lg:col-span-2">
+                       {/* Optional info for CV matches */}
+                       {jobs.length > 0 && localStorage.getItem('ms_jobs_is_matched') === 'true' && (
+                         <div className="mb-2 p-2 rounded bg-primary/10 border border-primary/20 text-xs flex items-center justify-between">
+                            <span className="flex items-center gap-1.5"><Sparkles className="w-3" /> Showing CV matches</span>
+                            <Button variant="ghost" size="xs" onClick={() => handleFindJobs(false)} className="h-6 underline text-primary">Show all</Button>
+                         </div>
+                       )}
                       <div className="relative">
                         <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input 
@@ -657,7 +664,18 @@ const Index = () => {
         )}
 
         {step === 'QA' && (
-          <div className="flex flex-col h-[85dvh] items-center justify-center px-4">
+          <div className="flex flex-col h-[85dvh] items-center justify-center px-4 relative">
+            {/* Unified Back Button for Loading States */}
+            {(isFetchingFullJob || isAnalyzingGap || isTailoring) && (
+              <Button 
+                variant="outline" 
+                onClick={() => setStep('JOBS')} 
+                className="absolute top-0 left-0 gap-2 mb-4 bg-background"
+              >
+                <ChevronLeft className="w-4 h-4" /> Cancel
+              </Button>
+            )}
+
             {isFetchingFullJob ? (
               <div className="text-center space-y-6 max-w-md animate-in fade-in zoom-in duration-500">
                 <div className="relative">

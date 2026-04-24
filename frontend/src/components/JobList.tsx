@@ -24,7 +24,7 @@ interface JobListProps {
   isLoading?: boolean;
 }
 
-function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: Job) => void; onSaveJob?: (j: Job) => void }) {
+export function JobCard({ job, onSelectJob, onSaveJob }: { job: Job; onSelectJob: (j: Job) => void; onSaveJob?: (j: Job) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [fullDesc, setFullDesc] = useState(job.description);
   const [isLoadingFull, setIsLoadingFull] = useState(false);

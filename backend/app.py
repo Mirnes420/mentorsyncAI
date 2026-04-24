@@ -305,21 +305,50 @@ def analyze_specific_job():
 
     # 1. Safer Supabase Check
     try:
-        # Use simple select().eq() instead of maybe_single() to avoid the 204 error
         query = supabase.table("jobdetails").select("full_text").eq("url", job_url).execute()
         
         if query.data and len(query.data) > 0:
-            print(f"DEBUG: Cache hit for {job_url}")
-            return jsonify({"full_text": query.data[0]['full_text'], "source": "cache"})
+            cached_text = query.data[0]['full_text']
+            # Check if cache is "dirty" with regional block junk
+            dirt_markers = ["not available in your region", "Deutschland", "United Kingdom", "Österreich", "Search", "back to last search"]
+            if not any(marker in cached_text for marker in dirt_markers):
+                print(f"DEBUG: Clean cache hit for {job_url}")
+                return jsonify({"full_text": cached_text, "source": "cache"})
+            else:
+                print(f"DEBUG: Dirty cache found. Forcing re-cleaning/scrape for {job_url}")
             
     except Exception as e:
-        # If the table doesn't exist yet or RLS fails, we just log and move to scraping
         print(f"Supabase Lookup Error: {e}")
 
     # 2. If not in cache or error occurred, do the scrape
     print(f"DEBUG: Scraping fresh data for {job_url}")
     full_text = scrape_job_description(job_url) 
     
+    # 2.5 AI Cleaning Step (Remove regional blocks, country selectors, etc.)
+    if full_text and "Error" not in full_text[:10]:
+        dirt_markers = ["not available in your region", "Deutschland", "United Kingdom", "Österreich", "Search", "back to last search"]
+        if any(marker in full_text for marker in dirt_markers):
+            print(f"DEBUG: Dirty text detected. Running AI cleaning...")
+            try:
+                clean_resp = generate_with_fallback(f"""
+                    TASK: Extract the ACTUAL job description from a noisy webpage scrape.
+                    
+                    INPUT TEXT:
+                    {full_text}
+                    
+                    INSTRUCTIONS:
+                    1. Remove all website navigation, country selection lists (Deutschland, United Kingdom, etc.), and search headers.
+                    2. Remove regional block messages like "Sorry, this job is not available in your region" or "Befinden Sie sich aktuell in Deutschland?".
+                    3. Return ONLY the job title, company info, and the job description itself.
+                    4. If the text clearly indicates that the job content is missing entirely (e.g., ONLY showing the country selection or block message), return "Error: Job content not available in this region".
+                    
+                    OUTPUT: Just the cleaned text.
+                """)
+                if clean_resp and clean_resp.text:
+                    full_text = clean_resp.text.strip()
+            except Exception as e:
+                print(f"AI Cleaning failed: {e}")
+
     # 3. Save to Supabase
     if full_text and "Error" not in full_text[:10]:
         try:
