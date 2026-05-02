@@ -31,10 +31,14 @@ yarn-error.log*
 
 # === LANDING PAGE ===
 # Ignore optimized assets or local config if using static site generators
+landing
 .sass-cache/
 *.css.map
 *.js.map
 _site/
+
+scratch
+scratch_test_adzuna.py
 
 # === THE "INVISIBLE" LAYER (SECURITY) ===
 # Never leak these. This is where your wealth and access live.
